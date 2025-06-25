@@ -1,5 +1,5 @@
 <p align="center">
-    <img width=800" src="./banner.png" alt="Life.js Banner">
+    <img width=800" src="../../banner.png" alt="Life.js Banner">
 </p>
 
 <hr/>
