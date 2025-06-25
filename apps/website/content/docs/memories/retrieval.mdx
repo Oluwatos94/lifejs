@@ -1,0 +1,38 @@
+---
+title: Retrieval (RAG)
+description: Lorem
+---
+
+While Live.js core doesn't any specific way of doing RAG, it also exposes a `live.js/retrieval` package
+that plugs into the core storage configuration and allows to perform simple semantic search.
+So if your retrieval use case is simple, you don't have to bring a complex third party provider and 
+can control the retrieval logic on your own.
+
+Here is how you can use it in a memory:
+
+`my-agent/memories/fun-facts.ts`
+```ts
+import { defineMemory } from "@live-js/core";
+import { defineRetrieval } from "@live-js/retrieval";
+
+// If you want to use that 
+const funFactsRetrieval = defineRetrieval({
+  id: "fun-facts",
+  metadata: {
+    userId: z.string(),
+  },
+});
+
+await funFactsRetrieval.saveItem({
+    content: "The user is named John",
+    metadata: {
+        userId: "123",
+    }
+})
+// you can also use saveItems() to save multiple items at once
+
+const funFacts = await funFactsRetrieval.searchItems({
+    content: "The user is named John",
+    topK: 10,
+})
+```

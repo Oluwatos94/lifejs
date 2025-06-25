@@ -1,0 +1,32 @@
+---
+title: Context
+description: Lorem
+---
+
+One of the main challenges that Live.js aim to solve is breaking out the traditional chatbot experience.
+
+We believe that while chatbots will remain useful in many cases, some applications will embrace more
+native and intuitive agentic experiences, where the agent is melted into the application.
+
+Until then, most agents framework forced you to organize your messages between the agent and the users
+by resource (e.g., userId) and thread (e.g. conversationId). 
+
+Live.js brings a less opinionated approach to contexts, where you can still segment by resource and thread
+if you want to, but can also choose, per-agent, totally different segmentations.
+
+Here are some examples of what that unlocks:
+
+- `context: {userId, chatId}` for a traditional chat experience
+- `context: {userId}` for a boundless agent experience, the user\<>agent interaction is infinite and not bound to a specific chat or topic.
+- `context: {userId, orgId}` for a boundless agent experience bound to a specific organization (in case the user can have multiple organizations)
+- or even `context: {orgId}` for a context shared by all the members of an organization
+- `context: {userId, articleId}` to bound interactions to a specific article (e.g., your a newspaper with a reading assistant)
+- `context: {userId, date}` to segmenent interactions by day
+- etc.
+
+
+Another cool things with contexts, is that if multiple agents use the same keys, they are merged, so let's say
+- Agent A is using: `context: {userId, orgId}`
+- And Agent B is using: `context: {userId, orgId, articleId}`
+- You can then query the context table to retrieve all the contexts for the `userId` no matter the `orgId` and `articleId`. Well it's flexible
+

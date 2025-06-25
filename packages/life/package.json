@@ -1,0 +1,48 @@
+{
+  "name": "life",
+  "version": "0.0.2",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "types": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "bin": {
+    "life": "./bin/cli.js"
+  },
+  "exports": {
+    "./agent": {
+      "import": {
+        "types": "./dist/agent/agent.d.ts",
+        "default": "./dist/agent/agent.mjs"
+      },
+      "require": {
+        "types": "./dist/agent/agent.d.ts",
+        "default": "./dist/agent/agent.js"
+      }
+    }
+  },
+  "dependencies": {
+    "@cartesia/cartesia-js": "^2.2.4",
+    "@deepgram/sdk": "4.1.0",
+    "@huggingface/transformers": "^3.5.2",
+    "@inkjs/ui": "^2.0.0",
+    "@livekit/protocol": "^1.39.0",
+    "@livekit/rtc-node": "^0.13.14",
+    "@paralleldrive/cuid2": "^2.2.2",
+    "@zenobius/ink-mouse": "^1.0.3",
+    "fast-json-stable-stringify": "^2.1.0",
+    "livekit-client": "^2.13.4",
+    "livekit-server-sdk": "^2.13.0",
+    "onnxruntime-node": "^1.22.0-rev",
+    "openai": "^5.3.0",
+    "react": "^19",
+    "superjson": "1.13.3",
+    "to-words": "^4.6.0",
+    "zod": "^3.25.58",
+    "zod-to-json-schema": "^3.24.5"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "@types/ws": "^8.18.1"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "title": "Life.js",
+  "pages": [
+    "./start-here",
+    "./memories",
+    "./actions",
+    "./percepts",
+    "./flows",
+    "./plugins",
+    "./configuration",
+    "./deployment"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "title": "¹ Start here",
+  "pages": ["./overview", "./installation", "./philosophy", "./cheat-sheet"],
+  "defaultOpen": true
+}

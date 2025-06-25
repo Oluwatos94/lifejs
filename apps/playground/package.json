@@ -1,0 +1,29 @@
+{
+  "name": "playground",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "agents": "life dev",
+    "dev": "next dev --turbopack --port 3000",
+    "build": "next build --turbopack",
+    "start": "next start",
+    "types": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "life": "workspace:^",
+    "@tailwindcss/postcss": "^4.1.8",
+    "next": "^15.3.3",
+    "postcss": "^8.5.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.1.8",
+    "zod": "^3.25.58"
+  },
+  "devDependencies": {
+    "@life/tsconfig": "workspace:^",
+    "@types/node": "^24.0.0",
+    "@types/react": "19.1.7",
+    "@types/react-dom": "19.1.6",
+    "typescript": "5.8.3"
+  }
+}
