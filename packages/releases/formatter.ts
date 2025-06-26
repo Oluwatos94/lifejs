@@ -9,11 +9,11 @@ const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 type Source = { type: "commit"; hash: string } | { type: "pull-request"; id: number };
 
-async function findPRfromCommit(sha: string): Promise<number | null> {
+async function findPRFromCommit(hash: string): Promise<number | null> {
   const { data } = await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
     owner: repoOrg,
     repo: repoName,
-    commit_sha: sha,
+    commit_sha: hash,
   });
   const pr = data.find((pr) => pr.merged_at) ?? data[0];
   return pr?.number ?? null;
@@ -47,6 +47,14 @@ async function getAuthors(source: Source): Promise<string[]> {
   }
 }
 
+async function mergedPRCount(login: string): Promise<number> {
+  const { data } = await octokit.rest.search.issuesAndPullRequests({
+    q: `repo:${repoOrg}/${repoName} is:pr is:merged author:${login}`,
+    per_page: 1,
+  });
+  return data.total_count; // 0, 1, 2, …
+}
+
 const changelogFunctions: ChangelogFunctions = {
   getDependencyReleaseLine: async () => "",
   getReleaseLine: async (changeset, type) => {
@@ -62,7 +70,7 @@ const changelogFunctions: ChangelogFunctions = {
     // Retrieve the source of the changeset
     const commitHash = changeset.commit;
     if (!commitHash) throw new Error(`Changeset '${changeset.id}' does not contain a commit hash.`);
-    const pullRequestId = await findPRfromCommit(commitHash);
+    const pullRequestId = await findPRFromCommit(commitHash);
     const source: Source = pullRequestId
       ? { type: "pull-request", id: pullRequestId }
       : { type: "commit", hash: commitHash };
@@ -70,13 +78,21 @@ const changelogFunctions: ChangelogFunctions = {
     // Retrieve the authors of the source
     const authors = await getAuthors(source);
 
-    // Generate release line
-    const authorsWithLinks = authors.map((author) => `[@${author}](https://github.com/${author})`);
+    // Retrieve whether the author is a new contributor
+    const isNewContributor = Object.fromEntries(
+      await Promise.all(authors.map(async (a) => [a, (await mergedPRCount(a)) <= 1])),
+    );
+
+    // Generate and return release line
+    const authorsWithLinks = authors.map(
+      (author) =>
+        `[@${author}](https://github.com/${author})${isNewContributor[author] ? " **(New contributor! 🎉)**" : ""}`,
+    );
     const sourceWithLinks =
       source.type === "commit"
         ? `[${source.hash.slice(0, 7)}](https://github.com/${repoOrg}/${repoName}/commit/${source.hash})`
         : `[#${source.id}](https://github.com/${repoOrg}/${repoName}/pull/${source.id})`;
-    return `- (${authorsWithLinks.join(", ")} in ${sourceWithLinks}) ${changeset.summary.trim()}`;
+    return `- ${authorsWithLinks.join(", ")} in ${sourceWithLinks} | ${changeset.summary.trim()}`;
   },
 };
 
