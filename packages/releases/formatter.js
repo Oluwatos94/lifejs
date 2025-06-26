@@ -78,7 +78,7 @@ const changelogFunctions = {
         const sourceWithLinks = source.type === "commit"
             ? `[${source.hash.slice(0, 7)}](https://github.com/${repoOrg}/${repoName}/commit/${source.hash})`
             : `[#${source.id}](https://github.com/${repoOrg}/${repoName}/pull/${source.id})`;
-        return `- ${authorsWithLinks.join(", ")} in ${sourceWithLinks} | ${changeset.summary.trim()}`;
+        return `- ${authorsWithLinks.join(", ")} in ${sourceWithLinks} — ${changeset.summary.trim()}`;
     },
 };
 export default changelogFunctions;
