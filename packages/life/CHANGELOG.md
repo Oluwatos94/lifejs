@@ -10,4 +10,4 @@
 
 ### Minor Changes
 
-- d9f876a: We needed to start somewhere, and we started here 🌱
+- [@LilaRest](https://github.com/LilaRest) in [d9f876a](https://github.com/lifejs/lifejs/commit/d9f876ade9bab676c5764534d4852089b421195f) — We needed to start somewhere, and we started here 🌱
