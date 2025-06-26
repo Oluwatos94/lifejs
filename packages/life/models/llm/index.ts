@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { OpenAILLM, openAILLMConfigSchema } from "./providers/openai";
+import { XaiLLM, xaiLLMConfigSchema } from "./providers/xai";
 
 // Providers
 export const llmProviders = {
   openai: { class: OpenAILLM, configSchema: openAILLMConfigSchema },
+  xai: { class: XaiLLM, configSchema: xaiLLMConfigSchema },
 } as const;
 
 export type LLMProvider = (typeof llmProviders)[keyof typeof llmProviders]["class"];

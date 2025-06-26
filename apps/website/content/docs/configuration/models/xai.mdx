@@ -1,0 +1,86 @@
+---
+title: xAI (Grok)
+description: Configure xAI's Grok models for large language model inference
+---
+
+## xAI Provider
+
+The xAI provider enables you to use Elon Musk's xAI Grok models in your Life.js agent.
+
+### Configuration
+
+```typescript
+import { Agent } from "life/agent";
+
+const agent = new Agent({
+  llm: {
+    provider: "xai",
+    apiKey: "xai-...", // Or set XAI_API_KEY environment variable
+    model: "grok-3-mini", // Default model
+    temperature: 0.5, // Controls randomness (0.0 to 2.0)
+  },
+  // ... other config
+});
+```
+
+### Environment Variables
+
+Set your xAI API key as an environment variable:
+
+```bash
+export XAI_API_KEY="xai-..."
+```
+
+### Available Models
+
+| Model | Description |
+|-------|-------------|
+| `grok-3` | Latest Grok model with best performance |
+| `grok-3-fast` | Faster variant of Grok 3 |
+| `grok-3-mini` | Smaller, more efficient model (default) |
+| `grok-3-mini-fast` | Fastest variant of Grok 3 Mini |
+| `grok-2-1212` | Previous generation Grok model |
+| `grok-2-vision-1212` | Vision-capable Grok model |
+| `grok-beta` | Beta model with latest features |
+| `grok-vision-beta` | Beta vision model |
+
+### Configuration Schema
+
+```typescript
+{
+  apiKey: string;        // xAI API key (required)
+  model: string;         // Model name (see table above)
+  temperature: number;   // 0.0 to 2.0, controls randomness
+}
+```
+
+### Features
+
+- ✅ Chat completions
+- ✅ Streaming responses
+- ✅ Function/tool calling
+- ✅ JSON mode (structured output)
+- ✅ Vision models (for image input)
+
+### Getting Started
+
+1. **Get your API key**: Visit [x.ai/api](https://x.ai/api) to obtain your xAI API key
+2. **Set environment variable**: `export XAI_API_KEY="your-key-here"`
+3. **Configure your agent**: Use the configuration example above
+4. **Start building**: Your agent is now ready to use Grok models!
+
+### Example Usage
+
+```typescript
+import { Agent } from "life/agent";
+
+const agent = new Agent({
+  llm: {
+    provider: "xai",
+    model: "grok-3-mini",
+    temperature: 0.7,
+  },
+});
+
+// The agent will now use xAI's Grok models for all LLM operations
+```
