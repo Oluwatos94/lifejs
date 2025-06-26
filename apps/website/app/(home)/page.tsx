@@ -1,5 +1,6 @@
 "use client";
 
+import { WebsiteHeader } from "@/components/website-header";
 import codeSnippet from "@/public/code-snippet.png";
 import logoFull from "@/public/logo-full.png";
 import onlydustLogo from "@/public/onlydust-logo-dark.png";
@@ -90,58 +91,12 @@ export default function Page() {
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-gradient-to-b from-white to-[#FDF3ED]/70">
+    <div className="flex min-h-screen flex-col items-center">
       {/* Navigation */}
-      <motion.header
-        className="-translate-x-1/2 absolute top-[1.125rem] left-1/2 z-10 transform"
-        initial={{
-          y: -100,
-          opacity: 0,
-          filter: "blur(10px)",
-        }}
-        animate={{
-          y: 0,
-          opacity: 1,
-          filter: "blur(0px)",
-        }}
-        transition={{
-          duration: 0.8,
-          ease: [0.21, 1.02, 0.73, 1],
-          delay: 1.2,
-        }}
-      >
-        <nav className="flex items-center justify-center rounded-full border border-black/6 bg-black/2 px-[1.0625rem] py-[0.75rem] transition-colors hover:border-black/10">
-          <div className="flex items-center gap-[1.6875rem] font-normal text-[0.90275rem] text-black/40">
-            <Link
-              href="/docs"
-              className="leading-none leading-trim tracking-normal transition-colors hover:text-black/60"
-            >
-              Docs
-            </Link>
-            <Link
-              href="/examples"
-              className="leading-none leading-trim tracking-normal transition-colors hover:text-black/60"
-            >
-              Examples
-            </Link>
-            {/* <Link
-              href="/news"
-              className="leading-none leading-trim tracking-normal transition-colors hover:text-black/60"
-            >
-              News
-            </Link> */}
-            <Link
-              href="/changelog"
-              className="leading-none leading-trim tracking-normal transition-colors hover:text-black/60"
-            >
-              Changelog
-            </Link>
-          </div>
-        </nav>
-      </motion.header>
+      <WebsiteHeader showLogo={false} animate={false} />
 
       {/* Main Content */}
-      <main className="flex w-full flex-col items-center gap-[3.75rem] px-[1.25rem] pt-[10rem] pb-[3.125rem]">
+      <main className="flex w-full flex-col items-center gap-[3.75rem] px-[1.25rem] pt-[5rem] pb-[3.125rem]">
         <div className="flex flex-col items-center gap-[3.75rem]">
           <div className="flex flex-col items-center gap-[3.125rem]">
             {/* Logo */}
@@ -165,7 +120,7 @@ export default function Page() {
                 opacity: 1,
               }}
             >
-              <Image src={logoFull} alt="Life.js" height={20} className="h-[20px]" />
+              <Image src={logoFull} alt="Life.js" height={100} className="h-[20px] w-auto" />
             </motion.div>
 
             {/* Hero Section */}
@@ -314,8 +269,8 @@ export default function Page() {
                 <Image
                   src={onlydustLogo}
                   alt="OnlyDust"
-                  height={23}
-                  className="opacity-28 transition-opacity hover:opacity-38"
+                  height={100}
+                  className="h-[23px] w-auto opacity-28 transition-opacity hover:opacity-38"
                 />
               </Link>
             </div>

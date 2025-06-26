@@ -44,7 +44,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       className={`${sfProDisplay.variable} ${ppNeueMontreal.variable} ${GeistMono.variable} ${gloriaHallelujah.variable}`}
       suppressHydrationWarning
     >
-      <body className="flex min-h-screen flex-col">
+      <body className="flex min-h-screen flex-col bg-gradient-to-b from-white to-[#FEF7F2]">
         <RootProvider>{children}</RootProvider>
       </body>
     </html>
