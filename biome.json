@@ -10,7 +10,7 @@
     }
   },
   "files": {
-    "ignore": ["apps/playground"]
+    "ignore": ["apps/playground", "packages/releases/formatter.js"]
   },
   "linter": {
     "rules": {

@@ -90,7 +90,7 @@ export default function Page() {
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-gradient-to-b from-white to-[#FDF3ED]">
+    <div className="flex min-h-screen flex-col items-center bg-gradient-to-b from-white to-[#FDF3ED]/70">
       {/* Navigation */}
       <motion.header
         className="-translate-x-1/2 absolute top-[1.125rem] left-1/2 z-10 transform"
@@ -124,12 +124,12 @@ export default function Page() {
             >
               Examples
             </Link>
-            <Link
+            {/* <Link
               href="/news"
               className="leading-none leading-trim tracking-normal transition-colors hover:text-black/60"
             >
               News
-            </Link>
+            </Link> */}
             <Link
               href="/changelog"
               className="leading-none leading-trim tracking-normal transition-colors hover:text-black/60"

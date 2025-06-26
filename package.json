@@ -14,8 +14,8 @@
     "version": "changeset version"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.4",
     "@biomejs/biome": "^1.9.4",
+    "@changesets/cli": "^2.29.4",
     "npm-check-updates": "^18.0.1",
     "turbo": "^2.5.4",
     "typescript": "^5.8.3",
@@ -28,8 +28,5 @@
   "workspaces": ["apps/*", "packages/*"],
   "patchedDependencies": {
     "ink@5.2.1": "patches/ink@5.2.1.patch"
-  },
-  "dependencies": {
-    "lucide-react": "^0.522.0"
   }
 }
