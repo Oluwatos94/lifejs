@@ -3,8 +3,9 @@
 import { Octokit } from "@octokit/rest";
 import { config } from "dotenv";
 config();
-const repoOrg = "LilaRest";
-const repoName = "tmp3";
+
+const repoOrg = "lifejs";
+const repoName = "lifejs";
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 async function findPRfromCommit(sha) {
   const { data } = await octokit.rest.repos.listPullRequestsAssociatedWithCommit({

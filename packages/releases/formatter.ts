@@ -1,13 +1,10 @@
-// Run `tsc index.ts --module none --target esnext --noEmitOnError false`
-// to compile the formatterinto index.js
-
 import type { ChangelogFunctions } from "@changesets/types";
 import { Octokit } from "@octokit/rest";
 import { config } from "dotenv";
 config();
 
-const repoOrg = "LilaRest";
-const repoName = "tmp3";
+const repoOrg = "lifejs";
+const repoName = "lifejs";
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 type Source = { type: "commit"; hash: string } | { type: "pull-request"; id: number };
