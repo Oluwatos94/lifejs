@@ -27,6 +27,7 @@
   "packageManager": "bun@1.2.15",
   "workspaces": ["apps/*", "packages/*"],
   "patchedDependencies": {
-    "ink@5.2.1": "patches/ink@5.2.1.patch"
+    "ink@5.2.1": "patches/ink@5.2.1.patch",
+    "tailwindcss-capsize@4.0.0": "patches/tailwindcss-capsize@4.0.0.patch"
   }
 }

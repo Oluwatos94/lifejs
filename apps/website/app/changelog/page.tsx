@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { WebsiteHeader } from "@/components/website-header";
 
 interface Change {
   content: string;
@@ -208,8 +207,6 @@ export default async function ChangelogPage() {
 
   return (
     <div className="min-h-screen">
-      <WebsiteHeader animate={false} showLogo={true} />
-
       <div className="mx-auto max-w-2xl px-6 py-16">
         <div className="mb-16 text-center">
           <h1 className="mb-4 font-medium text-3xl text-black tracking-tight">Changelog</h1>
@@ -245,6 +242,7 @@ export default async function ChangelogPage() {
               viewBox="0 0 24 24"
               aria-label="External link"
             >
+              <title>External link</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

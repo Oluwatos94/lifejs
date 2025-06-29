@@ -1,3 +1,4 @@
+import { WebsiteHeader } from "@/components/website-header";
 import "./global.css";
 import { RootProvider } from "fumadocs-ui/provider";
 import { GeistMono } from "geist/font/mono";
@@ -45,7 +46,10 @@ export default function Layout({ children }: { children: ReactNode }) {
       suppressHydrationWarning
     >
       <body className="flex min-h-screen flex-col bg-gradient-to-b from-white to-[#FEF7F2]">
-        <RootProvider>{children}</RootProvider>
+        <RootProvider>
+          <WebsiteHeader />
+          {children}
+        </RootProvider>
       </body>
     </html>
   );

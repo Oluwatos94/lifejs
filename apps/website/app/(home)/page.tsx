@@ -1,9 +1,10 @@
 "use client";
-
-import { WebsiteHeader } from "@/components/website-header";
+import { Button } from "@/components/ui/button";
+import { FancyButton } from "@/components/ui/fancy-button";
 import codeSnippet from "@/public/code-snippet.png";
 import logoFull from "@/public/logo-full.png";
 import onlydustLogo from "@/public/onlydust-logo-dark.png";
+import { ArrowRight } from "lucide-react";
 import { animate, stagger } from "motion";
 import { splitText } from "motion-plus";
 import { motion } from "motion/react";
@@ -106,9 +107,6 @@ export default function Page() {
 
   return (
     <div className="flex min-h-screen flex-col items-center">
-      {/* Navigation */}
-      <WebsiteHeader showLogo={false} animate={false} />
-
       {/* Main Content */}
       <main className="flex w-full flex-col items-center gap-[3.75rem] px-[1.25rem] pt-[5rem] pb-[3.125rem]">
         <div className="flex flex-col items-center gap-[3.75rem]">
@@ -205,33 +203,26 @@ export default function Page() {
               <div className="flex items-center gap-[1.25rem]">
                 {/* GitHub Stars */}
                 <Link href="https://github.com/lifejs/lifejs" target="_blank">
-                  <div className="flex h-[2rem] items-center gap-[0.5rem] rounded-[0.4rem] border border-[#cccccc] bg-gradient-to-b from-[#0000001a] to-[#6666661a] px-[0.6rem]">
+                  <Button size="sm" variant={"outline"} className="gap-2">
                     <svg
-                      className="h-[1rem] w-[1.025rem] text-[#555555]"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
                       role="img"
-                      aria-label="GitHub star icon"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="opacity-45"
                     >
-                      <title>GitHub star</title>
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      <title>GitHub</title>
+                      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
                     </svg>
-                    <span className="font-body font-medium text-[#555555] text-[0.85rem] leading-none leading-trim tracking-normal">
-                      {githubStats.stars}
-                    </span>
-                  </div>
+                    {githubStats.stars}
+                  </Button>
                 </Link>
 
-                {/* Get Started Button */}
-                <div className="relative h-[2rem] rounded-[0.4rem] bg-black p-[0.0625rem]">
-                  <Link
-                    href="/docs/start-here/installation"
-                    className="flex h-full items-center gap-[0.4625rem] rounded-[0.35rem] bg-gradient-to-b from-[#444444] to-black px-[0.4rem] font-body font-medium text-[0.85rem] text-white leading-none leading-trim tracking-normal transition-all hover:from-[#555555] hover:to-[#111111]"
-                  >
-                    <span>Get started</span>
-                    <span>→</span>
-                  </Link>
-                </div>
+                {/* Get Started */}
+                <Link href="/docs/start-here/installation">
+                  <FancyButton size="sm" className="gap-1">
+                    Get started <ArrowRight strokeWidth={2.5} className="size-3.5" />
+                  </FancyButton>
+                </Link>
               </div>
 
               {/* CLI Command */}

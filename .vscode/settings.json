@@ -62,10 +62,19 @@
     "**/source.config.ts": false,
     "**/global.css": false,
     "**/.archive": false,
-    "**/LICENSE*": false
+    "**/LICENSE*": false,
+    "**/.env*": false,
+    "**/CONTRIBUTING.md": false,
+    "**/packages/releases": false
   },
   "tailwindCSS.experimental.classRegex": [
-    ["([\"'`][^\"'`]*.*?[\"'`])", "[\"'`]([^\"'`]*).*?[\"'`]"]
+    ["([\"'`][^\"'`]*.*?[\"'`])", "[\"'`]([^\"'`]*).*?[\"'`]"],
+    ["clsx\\(([^)]*)\\)"],
+    ["cva\\(((?:[^()]|\\([^()]*\\))*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+    ["tv  \\(((?:[^()]|\\([^()]*\\))*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+    ["lintClassnames\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+    ["class[Nn]ames\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"],
+    ["cx\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
   ],
   "tailwindCSS.classAttributes": ["class", "className", ".*Class(es)?"]
 }
