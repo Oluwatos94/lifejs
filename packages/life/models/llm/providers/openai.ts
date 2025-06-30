@@ -9,7 +9,7 @@ import { LLMBase, type LLMGenerateMessageJob } from "../base";
 export const openAILLMConfigSchema = z.object({
   apiKey: z.string().default(process.env.OPENAI_API_KEY ?? ""),
   model: z.enum(["gpt-4o-mini", "gpt-4o"]).default("gpt-4o-mini"),
-  temperature: z.number().default(0.5),
+  temperature: z.number().min(0).max(2).default(0.5),
 });
 
 // Model
