@@ -99,11 +99,25 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
         model: this.config.model,
         temperature: this.config.temperature,
         messages: openaiMessages,
-        tools: openaiTools,
         stream: true,
+        ...(openaiTools?.length
+          ? {
+              tools: openaiTools,
+              parallel_tool_calls: true,
+            }
+          : {}),
       },
       { signal: job.raw.abortController.signal }, // Allows the stream to be cancelled
     );
+
+    let pendingToolCalls: Record<
+      string,
+      {
+        id: string;
+        name: string;
+        arguments: string;
+      }
+    > = {};
 
     for await (const chunk of stream) {
       // Ignore chunks if job was cancelled
@@ -123,14 +137,32 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
       // Handle tool calls tokens
       if (delta.tool_calls) {
         for (const toolCall of delta.tool_calls) {
-          if (toolCall.function?.name && toolCall.function?.arguments) {
-            job.raw.receiveChunk({
-              type: "tool",
-              toolId: toolCall.id as string,
-              toolInput: JSON.parse(toolCall.function.arguments || "{}"),
-            });
-          }
+          // Retrieve the tool call ID
+          const id = toolCall.id ?? Object.keys(pendingToolCalls).at(-1);
+          if (!id) throw new Error("No tool call ID");
+
+          // Ensure the tool call is tracked
+          if (!pendingToolCalls[id]) pendingToolCalls[id] = { id, name: "", arguments: "" };
+
+          // Compound name tokens
+          if (toolCall.function?.name) pendingToolCalls[id].name += toolCall.function.name;
+
+          // Compound arguments tokens
+          if (toolCall.function?.arguments)
+            pendingToolCalls[id].arguments += toolCall.function.arguments;
         }
+      }
+
+      // Handle tool call completion
+      if (chunk.choices[0]?.finish_reason === "tool_calls") {
+        for (const toolCall of Object.values(pendingToolCalls)) {
+          job.raw.receiveChunk({
+            type: "tool",
+            toolId: toolCall.id,
+            toolInput: JSON.parse(toolCall.arguments || "{}"),
+          });
+        }
+        pendingToolCalls = {};
       }
 
       // Handle end of stream
@@ -148,16 +180,18 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
     const openaiMessages = this.#toOpenAIMessages(params.messages);
 
     // Prepare JSON schema
-    const jsonSchema = zodToJsonSchema(params.schema, { name: "mySchema" });
+    const { definitions } = zodToJsonSchema(params.schema, { name: "schema" });
+    const schema = definitions?.schema;
 
     // Generate the object
+    // console.log("jsonSchema", jsonSchema);
     const response = await this.#client.chat.completions.create({
       model: this.config.model,
       messages: openaiMessages,
       temperature: this.config.temperature,
       response_format: {
         type: "json_schema",
-        json_schema: { name: "avc", schema: jsonSchema },
+        json_schema: { name: "avc", schema },
       },
     });
 
