@@ -1,5 +1,15 @@
 # life
 
+## 0.2.0
+
+### Minor Changes
+
+- [@DavidIfebueme](https://github.com/DavidIfebueme) **(New contributor! 🎉)**, [@LilaRest](https://github.com/LilaRest) **(New contributor! 🎉)** in [#55](https://github.com/lifejs/lifejs/pull/55) — Add support for X.ai LLM provider
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) **(New contributor! 🎉)** in [2129f4a](https://github.com/lifejs/lifejs/commit/2129f4ae9803292d848ef98141b53f817da0c603) — add min/max temparature to OpenAI provider's config schema
+
 ## 0.1.1
 
 ### Patch Changes
