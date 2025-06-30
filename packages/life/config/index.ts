@@ -1,31 +1,10 @@
-import {
-  type EOUProviderConfig,
-  type EOUProviderConfigInput,
-  eouProviderConfigSchema,
-} from "@/models/eou";
-import {
-  type LLMProviderConfig,
-  type LLMProviderConfigInput,
-  llmProviderConfigSchema,
-} from "@/models/llm";
-import {
-  type STTProviderConfig,
-  type STTProviderConfigInput,
-  sttProviderConfigSchema,
-} from "@/models/stt";
-import {
-  type TTSProviderConfig,
-  type TTSProviderConfigInput,
-  ttsProviderConfigSchema,
-} from "@/models/tts";
-import {
-  type VADProviderConfig,
-  type VADProviderConfigInput,
-  vadProviderConfigSchema,
-} from "@/models/vad";
+import { type EOUProviderConfig, eouProviderConfigSchema } from "@/models/eou";
+import { type LLMProviderConfig, llmProviderConfigSchema } from "@/models/llm";
+import { type STTProviderConfig, sttProviderConfigSchema } from "@/models/stt";
+import { type TTSProviderConfig, ttsProviderConfigSchema } from "@/models/tts";
+import { type VADProviderConfig, vadProviderConfigSchema } from "@/models/vad";
 import {
   type ServerTransportProviderConfig,
-  type ServerTransportProviderConfigInput,
   serverTransportProviderConfigSchema,
 } from "@/transport/index.server";
 import { z } from "zod";
@@ -42,24 +21,24 @@ export const configDefinitionSchema = z.object({
 });
 
 export interface ConfigDefinitionInput {
-  transport?: ServerTransportProviderConfigInput[keyof ServerTransportProviderConfigInput];
+  transport?: ServerTransportProviderConfig<"input">;
   models?: {
-    vad?: VADProviderConfigInput[keyof VADProviderConfigInput];
-    stt?: STTProviderConfigInput[keyof STTProviderConfigInput];
-    eou?: EOUProviderConfigInput[keyof EOUProviderConfigInput];
-    llm?: LLMProviderConfigInput[keyof LLMProviderConfigInput];
-    tts?: TTSProviderConfigInput[keyof TTSProviderConfigInput];
+    vad?: VADProviderConfig<"input">;
+    stt?: STTProviderConfig<"input">;
+    eou?: EOUProviderConfig<"input">;
+    llm?: LLMProviderConfig<"input">;
+    tts?: TTSProviderConfig<"input">;
   };
 }
 
 export interface ConfigDefinition {
-  transport: ServerTransportProviderConfig;
+  transport: ServerTransportProviderConfig<"output">;
   models: {
-    vad: VADProviderConfig;
-    stt: STTProviderConfig;
-    eou: EOUProviderConfig;
-    llm: LLMProviderConfig;
-    tts: TTSProviderConfig;
+    vad: VADProviderConfig<"output">;
+    stt: STTProviderConfig<"output">;
+    eou: EOUProviderConfig<"output">;
+    llm: LLMProviderConfig<"output">;
+    tts: TTSProviderConfig<"output">;
   };
 }
 

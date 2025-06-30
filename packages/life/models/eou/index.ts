@@ -11,16 +11,12 @@ export const eouProviders = {
 export type EOUProvider = (typeof eouProviders)[keyof typeof eouProviders]["class"];
 
 // Config
-export type EOUProviderConfigInput = {
-  [K in keyof typeof eouProviders]: { provider: K } & z.input<
-    (typeof eouProviders)[K]["configSchema"]
-  >;
-};
-export type EOUProviderConfig = {
-  [K in keyof typeof eouProviders]: { provider: K } & z.output<
-    (typeof eouProviders)[K]["configSchema"]
-  >;
+export type EOUProviderConfig<T extends "input" | "output"> = {
+  [K in keyof typeof eouProviders]: { provider: K } & (T extends "input"
+    ? z.input<(typeof eouProviders)[K]["configSchema"]>
+    : z.output<(typeof eouProviders)[K]["configSchema"]>);
 }[keyof typeof eouProviders];
+
 export const eouProviderConfigSchema = z.discriminatedUnion(
   "provider",
   Object.entries(eouProviders).map(([key, { configSchema }]) =>

@@ -1,53 +1,10 @@
-import { type ConfigDefinition, type ConfigDefinitionInput, defineConfig } from "@/config";
 import { type EOUProvider, eouProviders } from "@/models/eou";
 import { type LLMProvider, llmProviders } from "@/models/llm";
 import { type STTProvider, sttProviders } from "@/models/stt";
 import { type TTSProvider, ttsProviders } from "@/models/tts";
 import { type VADProvider, vadProviders } from "@/models/vad";
 import { type ServerTransportProvider, serverTransportProviders } from "@/transport/index.server";
-
-export interface AgentDefinitionInput {
-  config: ConfigDefinitionInput;
-}
-
-export interface _AgentDefinition {
-  id: string;
-  config: ConfigDefinition;
-}
-
-export class AgentDefinition<
-  const Def extends AgentDefinitionInput,
-  ExcludedMethods extends string = never,
-> {
-  #def: Def;
-
-  constructor(def: Def) {
-    this.#def = def;
-  }
-
-  config(params: ConfigDefinitionInput) {
-    const config = defineConfig(params);
-    const agent = new AgentDefinition<
-      Def & { config: typeof config.raw },
-      ExcludedMethods | "config"
-    >({
-      ...this.#def,
-      config: config.raw,
-    });
-    return agent as Omit<typeof agent, ExcludedMethods | "config">;
-  }
-
-  _getDefinition() {
-    return this.#def as unknown as _AgentDefinition;
-  }
-}
-
-export function defineAgent<const Id extends string>(id: Id) {
-  return new AgentDefinition({
-    id,
-    config: {},
-  });
-}
+import type { AgentDefinition } from "./definition";
 
 export class Agent {
   transport: InstanceType<ServerTransportProvider>;
@@ -61,7 +18,7 @@ export class Agent {
   };
   plugins: Record<string, unknown> = {};
 
-  constructor(definition: _AgentDefinition) {
+  constructor(definition: AgentDefinition) {
     // Initialize VAD model
     const vadProvider = vadProviders[definition.config.models.vad.provider];
     this.models.vad = new vadProvider.class(definition.config.models.vad);
