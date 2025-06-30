@@ -63,34 +63,28 @@ export class Agent {
 
   constructor(definition: _AgentDefinition) {
     // Initialize VAD model
-    this.models.vad = new vadProviders[definition.config.models.vad.provider].class(
-      definition.config.models.vad,
-    );
+    const vadProvider = vadProviders[definition.config.models.vad.provider];
+    this.models.vad = new vadProvider.class(definition.config.models.vad);
 
     // Initialize STT model
-    this.models.stt = new sttProviders[definition.config.models.stt.provider].class(
-      definition.config.models.stt,
-    );
+    const sttProvider = sttProviders[definition.config.models.stt.provider];
+    this.models.stt = new sttProvider.class(definition.config.models.stt);
 
     // Initialize EOU model
-    this.models.eou = new eouProviders[definition.config.models.eou.provider].class(
-      definition.config.models.eou,
-    );
+    const eouProvider = eouProviders[definition.config.models.eou.provider];
+    this.models.eou = new eouProvider.class(definition.config.models.eou);
 
     // Initialize LLM model
-    this.models.llm = new llmProviders[definition.config.models.llm.provider].class(
-      definition.config.models.llm,
-    );
+    const llmProvider = llmProviders[definition.config.models.llm.provider];
+    this.models.llm = new llmProvider.class(definition.config.models.llm as never);
 
     // Initialize TTS model
-    this.models.tts = new ttsProviders[definition.config.models.tts.provider].class(
-      definition.config.models.tts,
-    );
+    const ttsProvider = ttsProviders[definition.config.models.tts.provider];
+    this.models.tts = new ttsProvider.class(definition.config.models.tts);
 
     // Initialize transport
-    this.transport = new serverTransportProviders[definition.config.transport.provider].class(
-      definition.config.transport,
-    );
+    const serverTransportProvider = serverTransportProviders[definition.config.transport.provider];
+    this.transport = new serverTransportProvider.class(definition.config.transport);
 
     // // Register default plugins (if not disabled)
     // if (!config.disableDefaultPlugins?.core) this.plugins.core = corePlugin;
