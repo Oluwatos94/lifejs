@@ -277,7 +277,7 @@ export default function Page() {
                   src={onlydustLogo}
                   alt="OnlyDust"
                   height={100}
-                  className="h-[23px] w-auto opacity-28 transition-opacity hover:opacity-38"
+                  className="h-[23px] w-auto opacity-28 transition-opacity duration-300 hover:opacity-38"
                 />
               </Link>
             </div>

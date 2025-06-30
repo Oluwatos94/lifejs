@@ -137,10 +137,10 @@ export const WebsiteHeader: FC<WebsiteHeaderProps> = ({
         }}
       >
         <Link href="https://github.com/lifejs/lifejs" target="_blank">
-          <RiGithubFill className="size-6.5 text-black/20 transition-colors duration-500 hover:text-black/40" />
+          <RiGithubFill className="size-6.5 text-black/20 transition-colors duration-300 hover:text-black/40" />
         </Link>
         <Link href="https://discord.gg/U5wHjT5Ryj" target="_blank">
-          <RiDiscordFill className="size-6.5 text-black/20 transition-colors duration-500 hover:text-black/40" />
+          <RiDiscordFill className="size-6.5 text-black/20 transition-colors duration-300 hover:text-black/40" />
         </Link>
       </motion.div>
     </nav>
