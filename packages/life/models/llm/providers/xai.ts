@@ -5,24 +5,36 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { LLMBase, type LLMGenerateMessageJob } from "../base";
 
-// Config
-export const openAILLMConfigSchema = z.object({
-  apiKey: z.string().default(process.env.OPENAI_API_KEY ?? ""),
-  model: z.enum(["gpt-4o-mini", "gpt-4o"]).default("gpt-4o-mini"),
-  temperature: z.number().default(0.5),
+export const xaiLLMConfigSchema = z.object({
+  apiKey: z.string().default(process.env.XAI_API_KEY ?? ""),
+  model: z
+    .enum([
+      "grok-3",
+      "grok-3-fast",
+      "grok-3-mini",
+      "grok-3-mini-fast",
+      "grok-2-1212",
+      "grok-2-vision-1212",
+      "grok-beta",
+      "grok-vision-beta",
+    ])
+    .default("grok-3-mini"),
+  temperature: z.number().min(0).max(2).default(0.5),
 });
 
-// Model
-export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
+export class XaiLLM extends LLMBase<typeof xaiLLMConfigSchema> {
   #client: OpenAI;
 
-  constructor(config: z.input<typeof openAILLMConfigSchema>) {
-    super(openAILLMConfigSchema, config);
+  constructor(config: z.input<typeof xaiLLMConfigSchema>) {
+    super(xaiLLMConfigSchema, config);
     if (!config.apiKey)
       throw new Error(
-        "OPENAI_API_KEY environment variable or config.apiKey must be provided to use this model.",
+        "XAI_API_KEY environment variable or config.apiKey must be provided to use this model.",
       );
-    this.#client = new OpenAI({ apiKey: config.apiKey });
+    this.#client = new OpenAI({
+      apiKey: config.apiKey,
+      baseURL: "https://api.x.ai/v1",
+    });
   }
 
   /**
@@ -80,25 +92,20 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
     return tools.map(this.#toOpenAITool);
   }
 
-  /**
-   * Generate a message with job management - returns jobId along with stream
-   */
   async generateMessage(
     params: Parameters<typeof LLMBase.prototype.generateMessage>[0],
   ): Promise<LLMGenerateMessageJob> {
-    // Create a new job
     const job = this.createGenerateMessageJob();
 
-    // Prepare tools and messages in OpenAI format
     const openaiTools = params.tools.length > 0 ? this.#toOpenAITools(params.tools) : undefined;
     const openaiMessages = this.#toOpenAIMessages(params.messages);
 
-    // Prepare job stream
     const stream = await this.#client.chat.completions.create(
       {
         model: this.config.model,
         temperature: this.config.temperature,
         messages: openaiMessages,
+        tools: openaiTools,
         stream: true,
         ...(openaiTools?.length
           ? {
@@ -107,7 +114,7 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
             }
           : {}),
       },
-      { signal: job.raw.abortController.signal }, // Allows the stream to be cancelled
+      { signal: job.raw.abortController.signal },
     );
 
     let pendingToolCalls: Record<
@@ -120,15 +127,12 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
     > = {};
 
     for await (const chunk of stream) {
-      // Ignore chunks if job was cancelled
       if (job.raw.abortController.signal.aborted) continue;
 
-      // Extract the choice and delta (if any)
       const choice = chunk.choices[0];
       if (!choice) throw new Error("No choice");
       const delta = choice.delta;
 
-      // Handle content tokens
       if (delta.content) {
         job.raw.receiveChunk({ type: "content", content: delta.content });
         continue;
@@ -164,27 +168,22 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
         }
         pendingToolCalls = {};
       }
-
-      // Handle end of stream
+      // Handle end of generation
       if (chunk.choices[0]?.finish_reason === "stop") job.raw.receiveChunk({ type: "end" });
     }
 
-    // Return the job
     return job;
   }
 
   async generateObject(
     params: Parameters<typeof LLMBase.prototype.generateObject>[0],
   ): ReturnType<typeof LLMBase.prototype.generateObject> {
-    // Prepare messages in OpenAI format
     const openaiMessages = this.#toOpenAIMessages(params.messages);
 
     // Prepare JSON schema
     const { definitions } = zodToJsonSchema(params.schema, { name: "schema" });
     const schema = definitions?.schema;
 
-    // Generate the object
-    // console.log("jsonSchema", jsonSchema);
     const response = await this.#client.chat.completions.create({
       model: this.config.model,
       messages: openaiMessages,
@@ -195,10 +194,8 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
       },
     });
 
-    // Parse the response
     const obj = JSON.parse(response.choices[0]?.message?.content || "{}");
 
-    // Return the object
     return { success: true, data: obj };
   }
 }
