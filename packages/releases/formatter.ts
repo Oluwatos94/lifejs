@@ -9,6 +9,10 @@ const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 type Source = { type: "commit"; hash: string } | { type: "pull-request"; id: number };
 
+function capitalizeFirst(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 async function findPRFromCommit(hash: string): Promise<number | null> {
   const { data } = await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
     owner: repoOrg,
@@ -92,7 +96,8 @@ const changelogFunctions: ChangelogFunctions = {
       source.type === "commit"
         ? `[${source.hash.slice(0, 7)}](https://github.com/${repoOrg}/${repoName}/commit/${source.hash})`
         : `[#${source.id}](https://github.com/${repoOrg}/${repoName}/pull/${source.id})`;
-    return `- ${authorsWithLinks.join(", ")} in ${sourceWithLinks} — ${changeset.summary.trim()}`;
+
+    return `- ${authorsWithLinks.join(", ")} in ${sourceWithLinks} — ${capitalizeFirst(changeset.summary.trim())}`;
   },
 };
 
