@@ -1,0 +1,108 @@
+---
+title: Mistral AI
+description: Configure Mistral AI models for large language model inference
+---
+
+## Mistral AI Provider
+
+The Mistral provider enables you to use Mistral AI's powerful language models in your Life.js agent.
+
+### Configuration
+
+```typescript
+import { Agent } from "life/agent";
+
+const agent = new Agent({
+  llm: {
+    provider: "mistral",
+    apiKey: "sk-...", // Or set MISTRAL_API_KEY environment variable
+    model: "mistral-small-latest", // Default model
+    temperature: 0.5, // Controls randomness (0.0 to 1.0)
+  },
+  // ... other config
+});
+```
+
+### Environment Variables
+
+Set your Mistral API key as an environment variable:
+
+```bash
+export MISTRAL_API_KEY="sk-..."
+```
+
+### Available Models
+
+| Model | Description |
+|-------|-------------|
+| `mistral-large-latest` | Most capable model for complex tasks |
+| `mistral-large-2411` | Specific version of Mistral Large (Nov 2024) |
+| `mistral-large-2407` | Previous version of Mistral Large (Jul 2024) |
+| `mistral-small-latest` | Cost-efficient model for most tasks (default) |
+| `mistral-small-2501` | Specific version of Mistral Small (Jan 2025) |
+| `mistral-small-2503` | Alternative version of Mistral Small (Mar 2025) |
+| `mistral-medium-latest` | Balanced performance and cost |
+| `mistral-medium-2505` | Specific version of Mistral Medium (May 2025) |
+| `pixtral-large-latest` | Multimodal model with vision capabilities |
+| `pixtral-large-2411` | Specific version of Pixtral Large (Nov 2024) |
+| `codestral-latest` | Specialized for code generation |
+| `codestral-2501` | Specific version of Codestral (Jan 2025) |
+| `codestral-2405` | Previous version of Codestral (May 2024) |
+| `ministral-3b-latest` | World's best edge model (3B parameters) |
+| `ministral-8b-latest` | Powerful edge model (8B parameters) |
+| `open-mistral-7b` | Open-source 7B model |
+| `open-mixtral-8x7b` | Open-source Mixture of Experts model |
+| `open-mixtral-8x22b` | Large open-source MoE model |
+
+### Configuration Schema
+
+```typescript
+{
+  apiKey: string;        // Mistral API key (required)
+  model: string;         // Model name (see table above)
+  temperature: number;   // 0.0 to 1.0, controls randomness
+}
+```
+
+### Features
+
+- ✅ Chat completions
+- ✅ Streaming responses
+- ✅ Function/tool calling
+- ✅ JSON mode (structured output)
+- ✅ Vision models (Pixtral series)
+- ✅ Code generation (Codestral series)
+- ✅ Edge models (Ministral series)
+
+### Getting Started
+
+1. **Get your API key**: Visit [console.mistral.ai](https://console.mistral.ai) to obtain your Mistral API key
+2. **Set environment variable**: `export MISTRAL_API_KEY="your-key-here"`
+3. **Configure your agent**: Use the configuration example above
+4. **Start building**: Your agent is now ready to use Mistral models!
+
+### Example Usage
+
+```typescript
+import { Agent } from "life/agent";
+
+const agent = new Agent({
+  llm: {
+    provider: "mistral",
+    model: "mistral-small-latest",
+    temperature: 0.7,
+  },
+});
+
+// The agent will now use Mistral AI models for all LLM operations
+```
+
+### Model Selection Guide
+
+- **mistral-large**: Best for complex reasoning, analysis, and creative tasks
+- **mistral-small**: Ideal for most use cases with excellent cost/performance ratio
+- **mistral-medium**: Good balance between capability and cost
+- **pixtral-large**: Use when you need vision/image understanding capabilities
+- **codestral**: Optimized for code generation and programming tasks
+- **ministral**: Perfect for edge deployment and resource-constrained environments
+- **open-mistral/mixtral**: Great for self-hosted deployments

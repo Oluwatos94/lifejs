@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { MistralLLM, mistralLLMConfigSchema } from "./providers/mistral";
 import { OpenAILLM, openAILLMConfigSchema } from "./providers/openai";
 import { XaiLLM, xaiLLMConfigSchema } from "./providers/xai";
 
 // Providers
 export const llmProviders = {
+  mistral: { class: MistralLLM, configSchema: mistralLLMConfigSchema },
   openai: { class: OpenAILLM, configSchema: openAILLMConfigSchema },
   xai: { class: XaiLLM, configSchema: xaiLLMConfigSchema },
 } as const;
