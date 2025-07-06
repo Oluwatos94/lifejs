@@ -19,7 +19,7 @@ export interface TTSGenerateJob {
   id: string;
   cancel: () => void;
   getStream: () => AsyncQueue<TTSGenerateStreamChunkOutput>;
-  pushText: (text: string) => void;
+  pushText: (text: string, isLast?: boolean) => void;
   raw: {
     asyncQueue: AsyncQueue<TTSGenerateStreamChunkOutput>;
     abortController: AbortController;
@@ -56,12 +56,12 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
       id: jobId,
       getStream: () => queue,
       cancel: () => job.raw.abortController.abort(),
-      pushText: (text: string) => {
+      pushText: (text: string, isLast = false) => {
         // Append the text chunk to the full text
         if (!this.#jobsFullText[jobId]) this.#jobsFullText[jobId] = "";
         this.#jobsFullText[jobId] += text;
 
-        this._onGeneratePushText(job, text);
+        this._onGeneratePushText(job, text, isLast);
       },
       raw: {
         asyncQueue: queue,
@@ -150,5 +150,9 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
 
   // To be impemented by subclasses
   abstract generate(): Promise<TTSGenerateJob>;
-  protected abstract _onGeneratePushText(job: TTSGenerateJob, text: string): Promise<void>;
+  protected abstract _onGeneratePushText(
+    job: TTSGenerateJob,
+    text: string,
+    isLast: boolean,
+  ): Promise<void>;
 }

@@ -35,7 +35,6 @@ export class LiveKitServerTransport extends ServerTransportBase<typeof livekitSe
     Record<ServerTransportEvent["type"], ((event: ServerTransportEvent) => void)[]>
   > = {};
   source = new AudioSource(16_000, 1, 1000000);
-  flushTimeout: NodeJS.Timeout | null = null;
 
   private audioBuffer: Int16Array = new Int16Array(0);
   private readonly FRAME_DURATION_MS = 20; // 20ms frames
@@ -111,13 +110,6 @@ export class LiveKitServerTransport extends ServerTransportBase<typeof livekitSe
 
   async leaveRoom(): Promise<void> {
     this.ensureConnected("leaveRoom", this);
-
-    // Clear any pending flush timeout
-    if (this.flushTimeout) {
-      clearTimeout(this.flushTimeout);
-      this.flushTimeout = null;
-    }
-
     await this.room.disconnect();
     await dispose();
     this.isConnected = false;
@@ -154,32 +146,8 @@ export class LiveKitServerTransport extends ServerTransportBase<typeof livekitSe
     this.listeners[type].push(callback as (event: ServerTransportEvent) => void);
   }
 
-  async #flushAudioBuffer() {
-    if (this.audioBuffer.length > 0) {
-      console.log("flushing audio buffer");
-      // Pad with zeros or send partial frame
-      const paddedFrame = new Int16Array(this.SAMPLES_PER_FRAME);
-      paddedFrame.set(this.audioBuffer);
-      const audioFrame = new AudioFrame(paddedFrame, 16000, 1, this.SAMPLES_PER_FRAME);
-
-      try {
-        await this.source.captureFrame(audioFrame);
-      } catch (error) {
-        console.error("Error capturing flush audio frame:", error);
-      }
-
-      this.audioBuffer = new Int16Array(0);
-    }
-
-    // Clear the timeout reference
-    this.flushTimeout = null;
-  }
-
   async streamAudioChunk(chunk: Int16Array) {
     this.ensureConnected("streamAudioChunk", this);
-
-    // Clear the flush timeout (if any)
-    if (this.flushTimeout) clearTimeout(this.flushTimeout);
 
     // Add chunk to buffer
     this.audioBuffer = this.concatenateArrays(this.audioBuffer, chunk);
@@ -196,9 +164,6 @@ export class LiveKitServerTransport extends ServerTransportBase<typeof livekitSe
         console.error("Error capturing audio frame:", error);
       }
     }
-
-    // Flush the audio buffer after FRAME_DURATION_MS
-    // this.flushTimeout = setTimeout(() => this.#flushAudioBuffer(), this.FRAME_DURATION_MS * 5);
   }
 
   private concatenateArrays(a: Int16Array, b: Int16Array): Int16Array {

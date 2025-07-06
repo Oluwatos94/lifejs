@@ -102,6 +102,7 @@ export class Generation {
     for await (const chunk of this.#llmJob.getStream()) {
       if (chunk.type === "content") this.#ttsJob.pushText(chunk.content);
       else if (chunk.type === "tool") this.#toolRequests.push(chunk.tool);
+      else if (chunk.type === "end") this.#ttsJob.pushText("", true);
     }
   }
 

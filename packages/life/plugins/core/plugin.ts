@@ -65,13 +65,13 @@ export const corePlugin = definePlugin("core")
            * As always, benchmark carefully the change.
            */
           postPaddingChunks: z.number().default(200),
-          interruptMinDurationMs: z.number().default(100),
+          interruptMinDurationMs: z.number().default(50),
         })
         .default({}),
       endOfTurnDetection: z
         .object({
           threshold: z.number().default(0.6),
-          minTimeoutMs: z.number().default(1000),
+          minTimeoutMs: z.number().default(300),
           maxTimeoutMs: z.number().default(5000),
         })
         .default({}),
@@ -276,9 +276,8 @@ export const corePlugin = definePlugin("core")
     let inSpeech = false;
     const prePaddingBuffer = new RollingBuffer<Int16Array>(PRE_PADDING_CHUNKS);
     let postPaddingCount = POST_PADDING_CHUNKS;
-    const interruptBuffer = new RollingBuffer<Int16Array>(
-      (INTERRUPT_MIN_DURATION_MS / 1000) * 16000 * 4, // Keeps track of 4x the min. interruption duration in audio chunks
-    );
+    // Keeps track of 3x the min. interruption duration in audio chunks
+    const interruptBuffer = new RollingBuffer<Int16Array>((INTERRUPT_MIN_DURATION_MS / 10) * 3);
     let interruptDuration = 0;
 
     // Listen to user audio chunks
@@ -358,7 +357,7 @@ export const corePlugin = definePlugin("core")
           setTimeout(() => {
             if (interruptDuration - duration < 0) interruptDuration = 0;
             else interruptDuration -= duration;
-          }, INTERRUPT_MIN_DURATION_MS * 2);
+          }, INTERRUPT_MIN_DURATION_MS);
         }
 
         // If the interruption buffer is long enough, abort and emit all accumulated voice chunks

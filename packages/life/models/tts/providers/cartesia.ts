@@ -41,43 +41,30 @@ export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfigSchema> {
     return job;
   }
 
-  protected async _onGeneratePushText(job: TTSGenerateJob, text: string): Promise<void> {
+  protected async _onGeneratePushText(
+    job: TTSGenerateJob,
+    text: string,
+    isLast = false,
+  ): Promise<void> {
     // If the job has already been initialized, continue it
-    if (this.#initializedJobsIds.includes(job.id)) {
-      this.#socket.continue({
-        contextId: job.id,
-        modelId: "sonic-2",
-        language: "en",
-        voice: { mode: "id", id: "e8e5fffb-252c-436d-b842-8879b84445b6" },
-        transcript: text,
-        outputFormat: {
-          container: "raw",
-          encoding: "pcm_s16le",
-          sampleRate: 16000,
-        },
-      });
-    }
-    // Else, initialize a new job response
-    else {
-      // Set the job to have history
+    const response = this.#socket.send({
+      contextId: job.id,
+      modelId: "sonic-2",
+      language: "en",
+      voice: { mode: "id", id: "e8e5fffb-252c-436d-b842-8879b84445b6" },
+      transcript: text,
+      outputFormat: {
+        container: "raw",
+        encoding: "pcm_s16le",
+        sampleRate: 16000,
+      },
+      continue: !isLast,
+      maxBufferDelayMs: 100,
+    });
+
+    if (!this.#initializedJobsIds.includes(job.id)) {
       this.#initializedJobsIds.push(job.id);
-
-      const response = await this.#socket.send({
-        contextId: job.id,
-        modelId: "sonic-2",
-        language: "en",
-        voice: { mode: "id", id: "e8e5fffb-252c-436d-b842-8879b84445b6" },
-        transcript: text,
-        continue: true,
-        outputFormat: {
-          container: "raw",
-          encoding: "pcm_s16le",
-          sampleRate: 16000,
-        },
-      });
-
-      // Receive the job's messages
-      response.on("message", (msgString: string) => {
+      (await response).on("message", (msgString: string) => {
         // If the job has been aborted, ignore incoming messages
         if (job.raw.abortController.signal.aborted) return;
 
