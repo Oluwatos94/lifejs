@@ -1,5 +1,5 @@
 import type { Agent } from "@/agent/agent";
-import type { Resources, ToolRequest, ToolRequests } from "@/agent/resources";
+import type { Resources, ToolRequests } from "@/agent/resources";
 import type { LLMGenerateMessageJob } from "@/models/llm/base";
 import type { TTSGenerateJob } from "@/models/tts/base";
 import { AsyncQueue } from "@/shared/async-queue";
@@ -7,27 +7,32 @@ import { newId } from "@/shared/prefixed-id";
 import type { CoreEvent } from "../plugin";
 
 export type GenerationChunk =
-  | { type: "content"; textChunk: string; voiceChunk: Int16Array }
+  | { type: "content"; textChunk: string; voiceChunk?: Int16Array }
   | { type: "tool-requests"; requests: ToolRequests }
   | { type: "end" };
+
+type GenerationModes = Array<"voice" | "text">;
 
 export class Generation {
   id = newId("generation");
   queue: AsyncQueue<GenerationChunk> = new AsyncQueue();
   status: "idle" | "running" | "ended" = "idle";
+  modes: Array<"voice" | "text"> = ["voice", "text"];
 
   prefix = "";
   needContinue = false;
   preventInterruption = false;
 
   #agent: Agent;
+  #voiceEnabled: boolean;
 
   #llmJob: LLMGenerateMessageJob | null = null;
   #ttsJob: TTSGenerateJob | null = null;
-  #toolRequests: ToolRequest[] = [];
+  #toolRequests: ToolRequests | null = null;
 
-  constructor(params: { agent: Agent }) {
+  constructor(params: { agent: Agent; voiceEnabled: boolean }) {
     this.#agent = params.agent;
+    this.#voiceEnabled = params.voiceEnabled;
   }
 
   canInterrupt() {
@@ -58,8 +63,10 @@ export class Generation {
     this.status = "running";
 
     // Start generations jobs
-    this.#ttsJob = await this.#agent.models.tts.generate();
-    this.#startSpeaking();
+    if (this.#voiceEnabled) {
+      this.#ttsJob = await this.#agent.models.tts.generate();
+      this.#startSpeaking();
+    }
     this.#startThinking(resources);
   }
 
@@ -75,8 +82,9 @@ export class Generation {
           voiceChunk: chunk.voiceChunk,
         });
       else if (chunk.type === "end") {
-        if (this.#toolRequests.length)
+        if (this.#toolRequests) {
           this.queue.push({ type: "tool-requests", requests: this.#toolRequests });
+        }
         this.stop();
         break;
       } else if (chunk.type === "error") console.error("TTS error", chunk);
@@ -84,10 +92,11 @@ export class Generation {
   }
 
   async #startThinking(resources?: Resources) {
-    if (!this.#ttsJob) throw new Error("TTS job not initialized, should not happen.");
-
     // If a transcribe prefix is provided, push it to the TTS job
-    if (this.prefix) this.#ttsJob.pushText(this.prefix);
+    if (this.prefix) {
+      if (this.#voiceEnabled) this.#ttsJob?.pushText(this.prefix);
+      else this.queue.push({ type: "content", textChunk: this.prefix });
+    }
 
     // If doesn't need to continue, end thinking
     if (!this.needContinue) return this.stop();
@@ -99,10 +108,45 @@ export class Generation {
     this.#llmJob = await this.#agent.models.llm.generateMessage(resources);
 
     // Forward stream chunks to speaking
+    let hasContent = false;
     for await (const chunk of this.#llmJob.getStream()) {
-      if (chunk.type === "content") this.#ttsJob.pushText(chunk.content);
-      else if (chunk.type === "tool") this.#toolRequests.push(chunk.tool);
-      else if (chunk.type === "end") this.#ttsJob.pushText("", true);
+      // If voice is enabled, forward chunks to speaking job
+      if (this.#voiceEnabled) {
+        // - Content
+        if (chunk.type === "content") {
+          this.#ttsJob?.pushText(chunk.content);
+          hasContent = true;
+        }
+        // - Tools
+        else if (chunk.type === "tools") {
+          if (hasContent) this.#toolRequests = chunk.tools;
+          else {
+            this.queue.push({ type: "tool-requests", requests: chunk.tools });
+            this.stop();
+            break;
+          }
+        }
+        // - End
+        else if (chunk.type === "end") this.#ttsJob?.pushText("", true);
+      }
+      // Else, push chunks directly to the queue
+      // biome-ignore lint/style/useCollapsedElseIf: <explanation>
+      else {
+        // - Content
+        if (chunk.type === "content")
+          this.queue.push({ type: "content", textChunk: chunk.content });
+        // - Tools
+        else if (chunk.type === "tools") {
+          this.queue.push({ type: "tool-requests", requests: chunk.tools });
+          this.stop();
+          break;
+        }
+        // - End
+        else if (chunk.type === "end") {
+          this.stop();
+          break;
+        }
+      }
     }
   }
 

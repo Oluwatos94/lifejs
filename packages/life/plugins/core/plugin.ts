@@ -80,6 +80,7 @@ export const corePlugin = definePlugin("core")
   .context({
     messages: [] as Message[],
     status: { listening: true as boolean, thinking: false as boolean, speaking: false as boolean },
+    voiceEnabled: true as boolean,
   })
   .events({
     "messages.create": { dataSchema: createMessageInputSchema },
@@ -177,14 +178,18 @@ export const corePlugin = definePlugin("core")
       params: Extract<Parameters<typeof emit>[0], { type: "agent.interrupt" }>["data"],
     ) => emit({ type: "agent.interrupt", data: params, urgent: true }),
   })
-  // 1. Handle status changes
-  .addEffect("handle-agent-status", ({ event, context }) => {
+  // 1. Handle agent' status changes
+  .addEffect("handle-status", ({ event, context }) => {
+    const statusBefore = klona(context.status);
     if (event.type === "agent.generation-end")
       context.status = { listening: true, thinking: false, speaking: false };
     else if (event.type === "agent.voice-start") {
       context.status = { ...context.status, listening: false, speaking: true };
     } else if (event.type === "agent.generation-start") {
       context.status = { ...context.status, listening: false, thinking: true };
+    }
+    if (!stableDeepEqual(statusBefore, context.status)) {
+      console.log("🔄 Status changed", context.status);
     }
   })
   // 2. Maintain messages history
@@ -199,7 +204,7 @@ export const corePlugin = definePlugin("core")
     // Handle user text chunk
     else if (event.type === "user.text-chunk") {
       // If the last subject message is from user, append the text chunk to it
-      const lastSubjectMessage = history.findLastMessageOfRole(["user", "agent"]);
+      const lastSubjectMessage = history.findLastMessageOfRole(["user", "agent", "tool-response"]);
       if (lastSubjectMessage?.role === "user") {
         history.appendContentToUserMessage(lastSubjectMessage.id, event.data.textChunk);
       }
@@ -217,9 +222,11 @@ export const corePlugin = definePlugin("core")
     }
     // Handle agent tool requests
     else if (event.type === "agent.tool-requests") {
-      const lastAgentMessage = history.findLastMessageOfRole("agent");
-      if (!lastAgentMessage) throw new Error("No agent message found. Should not happen.");
-      history.addToolRequestsToAgentMessage(lastAgentMessage.id, event.data);
+      let lastAgentMessageId = history.findLastMessageOfRole("agent")?.id;
+      if (!lastAgentMessageId) {
+        lastAgentMessageId = history.createMessage({ role: "agent", content: "" });
+      }
+      history.addToolRequestsToAgentMessage(lastAgentMessageId, event.data);
     }
     // Handle agent tool responses
     else if (event.type === "agent.tool-response") {
@@ -229,33 +236,40 @@ export const corePlugin = definePlugin("core")
     else if (event.type === "agent.interrupted") {
       const lastAgentMessage = history.findLastMessageOfRole("agent");
       if (!lastAgentMessage) throw new Error("No agent message found. Should not happen.");
-      history.appendContentToAgentMessage(
-        lastAgentMessage.id,
-        `[Interrupted by ${event.data.author}]`,
-      );
+      if (lastAgentMessage.role !== "agent") return; // for typesafety below
+      if (!lastAgentMessage.content.includes("[Interrupted")) {
+        history.appendContentToAgentMessage(
+          lastAgentMessage.id,
+          `[Interrupted by ${event.data.author}]`,
+        );
+      }
     }
     // Handle agent text chunks
     else if (event.type === "agent.text-chunk") {
       // If the last subject message is from agent, append the text chunk to it
-      const lastSubjectMessage = history.findLastMessageOfRole(["user", "agent"]);
+      const lastSubjectMessage = history.findLastMessageOfRole(["user", "agent", "tool-response"]);
       if (lastSubjectMessage?.role === "agent") {
-        history.appendContentToAgentMessage(lastSubjectMessage.id, event.data.textChunk);
+        if (!lastSubjectMessage.content.includes("[Interrupted")) {
+          history.appendContentToAgentMessage(lastSubjectMessage.id, event.data.textChunk);
+        }
       }
       // Else, create a new agent message
       else history.createMessage({ role: "agent", content: event.data.textChunk });
     }
+
     // Save the modified messages array
     context.messages = history.getMessages();
 
     if (!stableDeepEqual(context.messages, _initialMessages)) {
-      console.log(
-        "💬",
-        context.messages.map((m) => {
-          if (m.role === "user" || m.role === "agent") return `${m.role}: ${m.content}`;
-          const { createdAt, lastUpdated, role, id, ...rest } = klona(m);
-          return `${m.role}: ${JSON.stringify(rest)}`;
-        }),
-      );
+      // console.log(
+      //   "💬",
+      //   context.messages.map((m) => {
+      //     if (m.role === "user" || m.role === "agent") return `${m.role}: ${m.content}`;
+      //     const { createdAt, lastUpdated, role, id, ...rest } = klona(m);
+      //     return `${m.role}: ${JSON.stringify(rest)}`;
+      //   }),
+      // );
+      console.log("💬", context.messages);
     }
   })
   // 3. Listen for incoming audio chunks coming from the WebRTC room
@@ -354,6 +368,9 @@ export const corePlugin = definePlugin("core")
         if (inSpeech) {
           const duration = audioChunkToMs(event.data.audioChunk);
           interruptDuration += duration;
+          console.log(
+            `🔴 Interrupt duration: ${interruptDuration}ms / ${INTERRUPT_MIN_DURATION_MS}ms ${interruptDuration >= INTERRUPT_MIN_DURATION_MS}`,
+          );
           setTimeout(() => {
             if (interruptDuration - duration < 0) interruptDuration = 0;
             else interruptDuration -= duration;
@@ -361,7 +378,8 @@ export const corePlugin = definePlugin("core")
         }
 
         // If the interruption buffer is long enough, abort and emit all accumulated voice chunks
-        if (interruptDuration > INTERRUPT_MIN_DURATION_MS) {
+        if (interruptDuration >= INTERRUPT_MIN_DURATION_MS) {
+          console.log("🟥 Interrupting");
           methods.interrupt({ reason: "The user is speaking", author: "user" });
           emit({ type: "user.voice-start" });
           for (const voiceChunk of interruptBuffer.get()) {
@@ -457,7 +475,8 @@ export const corePlugin = definePlugin("core")
     });
 
     // Forward events to the orchestrator
-    for await (const { event } of queue) orchestrator.scheduleGenerations(event);
+    for await (const { event, context } of queue)
+      orchestrator.scheduleGenerations(event, context.voiceEnabled);
   })
   // 8. Handle resources requests
   .addEffect("handle-resources", ({ event, emit, context, config }) => {
@@ -468,7 +487,7 @@ export const corePlugin = definePlugin("core")
     });
   })
   // 9. Handle tools executions
-  .addEffect("handle-tools", async ({ event, emit, config }) => {
+  .addEffect("handle-tools", async ({ event, emit, config, methods }) => {
     if (event.type !== "agent.tool-requests") return;
 
     for (const request of event.data) {
@@ -486,6 +505,7 @@ export const corePlugin = definePlugin("core")
               toolOutput: result.output,
             },
           },
+          urgent: true,
         });
       } catch (error) {
         emit({
@@ -497,8 +517,11 @@ export const corePlugin = definePlugin("core")
               toolError: JSON.stringify(serializeError(error)),
             },
           },
+          urgent: true,
         });
       }
+
+      methods.continue({ interrupt: "abrupt" });
     }
   })
   // 10. Stream agent speech to the user

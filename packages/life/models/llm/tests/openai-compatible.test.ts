@@ -137,7 +137,8 @@ async function consumeStream(
             results.hasContent = true;
             checkInactivity();
           } else if (chunk.type === "tool") {
-            results.tools.push({ name: String(chunk.toolName), input: chunk.toolInput });
+            const tool = chunk.tool as { name: string; input: unknown } | undefined;
+            results.tools.push({ name: tool?.name || "unknown", input: tool?.input });
             results.toolsCalled++;
             checkInactivity();
           } else if (chunk.type === "end") {

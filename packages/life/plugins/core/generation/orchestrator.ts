@@ -12,6 +12,7 @@ export class GenerationOrchestrator {
   #emit: EmitFunction<typeof corePlugin._definition.events>;
   #coreQueueSome: (predicate: (event: CoreEvent) => boolean) => boolean;
   #consumeQueue: AsyncQueue<Generation> = new AsyncQueue();
+  #voiceEnabled = false;
 
   #generations: Generation[] = [];
   #decidePromises: {
@@ -40,14 +41,19 @@ export class GenerationOrchestrator {
     let interrupted = false;
     // Try interrupting all generations
     for (const generation of this.#generations) {
+      console.log(
+        `🟢 Try interrupting gen ${generation.id} (status: ${generation.status}, canInterrupt: ${generation.canInterrupt()}, force: ${event.data.force})`,
+      );
       if (generation.status === "running" && (generation.canInterrupt() || event.data.force)) {
         generation.stop(true);
         this.#generations = this.#generations.filter((g) => g !== generation);
         interrupted = true;
       }
     }
+
     // If at least one generation was interrupted, notify the interruption
     if (interrupted) {
+      console.log("🟩 Interrupted");
       this.#emit({
         type: "agent.interrupted",
         data: {
@@ -176,7 +182,10 @@ export class GenerationOrchestrator {
   // - For that later, add a stopAfter() method to generations, which prompt them to stop streaming after that time
   // - And start the next generation from the end of the previous one
   // if (generation.status === "running") continue;
-  scheduleGenerations(event?: CoreEvent): unknown {
+  scheduleGenerations(event: CoreEvent, voiceEnabled: boolean): unknown {
+    // Update the voice enabled flag
+    this.#voiceEnabled = voiceEnabled;
+
     // Ignore non-generation events
     if (!event || !this.#isGenerationEvent(event)) return;
 
@@ -191,7 +200,7 @@ export class GenerationOrchestrator {
 
     // If there is no idle generation, create one
     if (!generation) {
-      generation = new Generation({ agent: this.#agent });
+      generation = new Generation({ agent: this.#agent, voiceEnabled: this.#voiceEnabled });
       this.#generations.push(generation);
     }
 
@@ -245,11 +254,20 @@ export class GenerationOrchestrator {
 
     for await (const generation of this.#consumeQueue) {
       for await (const chunk of limiter(generation.queue)) {
+        // If voice has been disabled, but the agent was speaking, switch speaking status
+        if (!this.#voiceEnabled && agentIsSpeaking) {
+          this.#emit({ type: "agent.voice-end" });
+          agentIsSpeaking = false;
+        }
+
         // Forward content chunks
         if (chunk.type === "content") {
+          // - Text chunks
           if (chunk.textChunk.length)
             this.#emit({ type: "agent.text-chunk", data: { textChunk: chunk.textChunk } });
-          if (chunk.voiceChunk.length) {
+
+          // - Voice chunks
+          if (this.#voiceEnabled && chunk.voiceChunk?.length) {
             this.#emit({ type: "agent.voice-chunk", data: { voiceChunk: chunk.voiceChunk } });
             if (!agentIsSpeaking) {
               this.#emit({ type: "agent.voice-start" });
@@ -257,9 +275,12 @@ export class GenerationOrchestrator {
             }
           }
         }
+
         // Forward tool requests
-        else if (chunk.type === "tool-requests")
-          this.#emit({ type: "agent.tool-requests", data: chunk.requests ?? [] });
+        else if (chunk.type === "tool-requests" && chunk.requests.length) {
+          this.#emit({ type: "agent.tool-requests", data: chunk.requests });
+        }
+
         // Or if this is the end of the generation, try scheduling the next generation
         else if (chunk.type === "end") {
           if (agentIsSpeaking) {

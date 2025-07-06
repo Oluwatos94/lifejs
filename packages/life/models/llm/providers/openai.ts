@@ -154,16 +154,14 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
 
         // Handle tool call completion
         if (chunk.choices[0]?.finish_reason === "tool_calls") {
-          for (const toolCall of Object.values(pendingToolCalls)) {
-            job.raw.receiveChunk({
-              type: "tool",
-              tool: {
-                id: toolCall.id,
-                name: toolCall.name,
-                input: JSON.parse(toolCall.arguments || "{}"),
-              },
-            });
-          }
+          job.raw.receiveChunk({
+            type: "tools",
+            tools: Object.values(pendingToolCalls).map((toolCall) => ({
+              id: toolCall.id,
+              name: toolCall.name,
+              input: JSON.parse(toolCall.arguments || "{}"),
+            })),
+          });
           pendingToolCalls = {};
         }
 
