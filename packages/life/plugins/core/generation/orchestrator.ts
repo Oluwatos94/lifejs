@@ -247,9 +247,9 @@ export class GenerationOrchestrator {
   }
 
   async #consumeGenerations() {
-    // Add a throttle to send max. 100ms of upfront chunks to the user
+    // Add a throttle to send max. 200ms of upfront chunks to the user
     // This allows keeping interruptions management on the server.
-    const limiter = throttledGenerationQueue(100);
+    const limiter = throttledGenerationQueue(200);
     let agentIsSpeaking = false;
 
     for await (const generation of this.#consumeQueue) {

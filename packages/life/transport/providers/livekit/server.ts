@@ -37,8 +37,10 @@ export class LiveKitServerTransport extends ServerTransportBase<typeof livekitSe
   source = new AudioSource(16_000, 1, 1000000);
 
   private audioBuffer: Int16Array = new Int16Array(0);
-  private readonly FRAME_DURATION_MS = 20; // 20ms frames
-  private readonly SAMPLES_PER_FRAME = (16000 * this.FRAME_DURATION_MS) / 1000; // 320 samples for 20ms at 16kHz
+  private readonly FRAME_DURATION_MS = 10; // 10ms frames
+  private readonly SAMPLES_PER_FRAME = (16000 * this.FRAME_DURATION_MS) / 1000; // 160 samples for 10ms at 16kHz
+
+  #flushTimeout: NodeJS.Timeout | null = null;
 
   constructor(config: LiveKitServerConfig<"input">) {
     super(livekitServerConfigSchema, config);
@@ -146,13 +148,27 @@ export class LiveKitServerTransport extends ServerTransportBase<typeof livekitSe
     this.listeners[type].push(callback as (event: ServerTransportEvent) => void);
   }
 
+  async flushAudioBuffer() {
+    if (!this.audioBuffer?.length) return;
+    const audioFrame = new AudioFrame(this.audioBuffer, 16000, 1, this.audioBuffer.length);
+    try {
+      await this.source.captureFrame(audioFrame);
+    } catch (error) {
+      console.error("Error capturing audio frame:", error);
+    }
+    this.audioBuffer = new Int16Array(0);
+  }
+
   async streamAudioChunk(chunk: Int16Array) {
     this.ensureConnected("streamAudioChunk", this);
+
+    // Clear any existing flush timeout
+    if (this.#flushTimeout) clearTimeout(this.#flushTimeout);
 
     // Add chunk to buffer
     this.audioBuffer = this.concatenateArrays(this.audioBuffer, chunk);
 
-    // Stream audio frames >= FRAME_DURATION_MS
+    // Stream audio frames buffered by FRAME_DURATION_MS chunks
     while (this.audioBuffer.length >= this.SAMPLES_PER_FRAME) {
       const frameData = this.audioBuffer.slice(0, this.SAMPLES_PER_FRAME);
       this.audioBuffer = this.audioBuffer.slice(this.SAMPLES_PER_FRAME);
@@ -163,6 +179,12 @@ export class LiveKitServerTransport extends ServerTransportBase<typeof livekitSe
       } catch (error) {
         console.error("Error capturing audio frame:", error);
       }
+    }
+
+    // If some frames remain, flush them after 150ms
+    // (this should leave enough time to most TTS providers to output next chunk)
+    if (this.audioBuffer.length > 0) {
+      this.#flushTimeout = setTimeout(() => this.flushAudioBuffer(), 150);
     }
   }
 
