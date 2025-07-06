@@ -1,5 +1,20 @@
 # life
 
+## 0.4.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [1e6a64a](https://github.com/lifejs/lifejs/commit/1e6a64a0781c3738231e4719504a2758dc5e9ab1) — Re-introduce proper buffer flushing in the Livekit provider
+- [@LilaRest](https://github.com/LilaRest) in [90e523c](https://github.com/lifejs/lifejs/commit/90e523c74bbafa595056008994c99e1300fc4656) — Make voice output optional and configurable during conversation
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [4b2dc70](https://github.com/lifejs/lifejs/commit/4b2dc70ff627617a842744697f88303260f3b365) — Replace history message IDs by prefixed short IDs
+- [@LilaRest](https://github.com/LilaRest) in [90e523c](https://github.com/lifejs/lifejs/commit/90e523c74bbafa595056008994c99e1300fc4656) — Prevent further history writing after interruption
+- [@LilaRest](https://github.com/LilaRest) in [e938b3d](https://github.com/lifejs/lifejs/commit/e938b3d02fe75527e7d2344a3fe99deed78bd75f) — Avoid agent.interrupted event being sent when a generation hasn't sent any output token yet
+- [@LilaRest](https://github.com/LilaRest) in [90e523c](https://github.com/lifejs/lifejs/commit/90e523c74bbafa595056008994c99e1300fc4656) — Tools were blocked by TTS pipeline when no content chunk was emitted
+- [@LilaRest](https://github.com/LilaRest) in [2ca40eb](https://github.com/lifejs/lifejs/commit/2ca40ebcebbe5883ba02a0844ded5d394486318f) — Fix pace contamination in base TTS class sometimes leading to doublons or missing parts in transcripts
+
 ## 0.3.0
 
 ### Minor Changes
