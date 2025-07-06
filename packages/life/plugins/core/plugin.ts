@@ -160,23 +160,25 @@ export const corePlugin = definePlugin("core")
   })
   .methods({
     createMessage: ({ emit }, message: CreateMessageInput) =>
-      emit({ type: "messages.create", data: message, urgent: false }),
+      emit({ type: "messages.create", data: message, urgent: true }),
     updateMessage: ({ emit }, message: UpdateMessageInput) =>
-      emit({ type: "messages.update", data: message, urgent: false }),
+      emit({ type: "messages.update", data: message, urgent: true }),
     continue: (
       { emit },
       params: Extract<Parameters<typeof emit>[0], { type: "agent.continue" }>["data"],
-    ) => emit({ type: "agent.continue", data: params, urgent: false }),
+    ) => emit({ type: "agent.continue", data: params, urgent: true }),
     decide: (
       { emit },
       params: Extract<Parameters<typeof emit>[0], { type: "agent.decide" }>["data"],
-    ) => emit({ type: "agent.decide", data: params, urgent: false }),
+    ) => emit({ type: "agent.decide", data: params, urgent: true }),
     say: ({ emit }, params: Extract<Parameters<typeof emit>[0], { type: "agent.say" }>["data"]) =>
-      emit({ type: "agent.say", data: params, urgent: false }),
+      emit({ type: "agent.say", data: params, urgent: true }),
     interrupt: (
       { emit },
       params: Extract<Parameters<typeof emit>[0], { type: "agent.interrupt" }>["data"],
-    ) => emit({ type: "agent.interrupt", data: params, urgent: false }),
+    ) => {
+      emit({ type: "agent.interrupt", data: params, urgent: true });
+    },
   })
   // 1. Handle agent' status changes
   .addEffect("handle-status", ({ event, context }) => {
@@ -505,7 +507,7 @@ export const corePlugin = definePlugin("core")
               toolOutput: result.output,
             },
           },
-          urgent: false,
+          urgent: true,
         });
       } catch (error) {
         emit({
@@ -517,7 +519,7 @@ export const corePlugin = definePlugin("core")
               toolError: JSON.stringify(serializeError(error)),
             },
           },
-          urgent: false,
+          urgent: true,
         });
       }
 

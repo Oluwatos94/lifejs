@@ -23,6 +23,9 @@ export class Generation {
   needContinue = false;
   preventInterruption = false;
 
+  // Track whether this generation has already output some chunks
+  hasOutputted = false;
+
   #agent: Agent;
   #voiceEnabled: boolean;
 
@@ -88,6 +91,7 @@ export class Generation {
         this.stop();
         break;
       } else if (chunk.type === "error") console.error("TTS error", chunk);
+      this.hasOutputted = true;
     }
   }
 
@@ -121,6 +125,7 @@ export class Generation {
         else if (chunk.type === "tools") {
           if (hasContent) this.#toolRequests = chunk.tools;
           else {
+            this.hasOutputted = true;
             this.queue.push({ type: "tool-requests", requests: chunk.tools });
             this.stop();
             break;
@@ -130,7 +135,6 @@ export class Generation {
         else if (chunk.type === "end") this.#ttsJob?.pushText("", true);
       }
       // Else, push chunks directly to the queue
-      // biome-ignore lint/style/useCollapsedElseIf: <explanation>
       else {
         // - Content
         if (chunk.type === "content")
@@ -146,6 +150,7 @@ export class Generation {
           this.stop();
           break;
         }
+        this.hasOutputted = true;
       }
     }
   }

@@ -48,7 +48,7 @@ export class GenerationOrchestrator {
       if (generation.status === "running" && (generation.canInterrupt() || event.data.force)) {
         generation.stop(true);
         this.#generations = this.#generations.filter((g) => g !== generation);
-        interrupted = true;
+        if (generation.hasOutputted) interrupted = true;
       }
     }
 
@@ -118,7 +118,7 @@ export class GenerationOrchestrator {
           }),
         });
         if (result.success && result.data.shouldContinue && generation.status === "idle") {
-          this.#emit({ type: "agent.continue", data: event.data, urgent: false });
+          this.#emit({ type: "agent.continue", data: event.data, urgent: true });
         }
 
         // Remove the promise from the list
@@ -178,11 +178,6 @@ export class GenerationOrchestrator {
     return this.#coreQueueSome((event) => this.#isGenerationEvent(event));
   }
 
-  // If the generation is running, wait
-  // TODO: In the future, if the next generation is a smooth interrupt, sync both generations for a smooth transition
-  // - For that later, add a stopAfter() method to generations, which prompt them to stop streaming after that time
-  // - And start the next generation from the end of the previous one
-  // if (generation.status === "running") continue;
   scheduleGenerations(event: CoreEvent, voiceEnabled: boolean): unknown {
     // Update the voice enabled flag
     this.#voiceEnabled = voiceEnabled;
