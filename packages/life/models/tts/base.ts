@@ -39,6 +39,13 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
   #jobsFullAudio: Record<string, Int16Array> = {};
   #jobsTakenText: Record<string, string> = {};
 
+  /**
+   * Used to avoid pace contamination between jobs.
+   * Each job needs a fixed pace during its lifetime, else this could lead
+   * to broken textChunks estimates, like doublons or missing parts.
+   */
+  #jobsPaces: Record<string, number> = {};
+
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {
     this.config = configSchema.parse({ ...config });
 
@@ -52,6 +59,10 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
   protected createGenerateJob(): TTSGenerateJob {
     const queue = new AsyncQueue<TTSGenerateStreamChunkOutput>();
     const jobId = newId("job");
+    // Save the current pace for the new job
+    this.#jobsPaces[jobId] = this.#pace.average;
+
+    // Create the job
     const job: TTSGenerateJob = {
       id: jobId,
       getStream: () => queue,
@@ -81,13 +92,17 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
             // If the TTS provider doesn't already provide text transcripts, estimate it
             if (!chunk.textChunk) {
               const totalVoiceDurationMs = audioChunkToMs(this.#jobsFullAudio[jobId]);
-              const tokensCount = Math.floor(totalVoiceDurationMs / this.#pace.average);
+              const jobPace = this.#jobsPaces[jobId];
+              if (!jobPace) throw new Error("Job pace not found, should not happen.");
+              const tokensCount = Math.floor(totalVoiceDurationMs / jobPace);
               const { taken: newTaken } = tokenizer.take(
                 this.#jobsFullText[jobId] ?? "",
                 tokensCount,
               );
               const alreadyTaken = this.#jobsTakenText[jobId] ?? "";
-              chunk.textChunk = newTaken.replace(alreadyTaken, "");
+              chunk.textChunk = newTaken.startsWith(alreadyTaken)
+                ? newTaken.slice(alreadyTaken.length)
+                : newTaken;
               this.#jobsTakenText[jobId] = newTaken;
             }
 
@@ -130,6 +145,7 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
             this.#jobsFullText[jobId] = "";
             this.#jobsTakenText[jobId] = "";
             this.#jobsFullAudio[jobId] = new Int16Array(0);
+            delete this.#jobsPaces[jobId];
           }
 
           // Handle error chunks
@@ -138,6 +154,7 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
             this.#jobsFullText[jobId] = "";
             this.#jobsTakenText[jobId] = "";
             this.#jobsFullAudio[jobId] = new Int16Array(0);
+            delete this.#jobsPaces[jobId];
           }
 
           // Push the chunk to the queue
