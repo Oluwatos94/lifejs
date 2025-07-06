@@ -2,6 +2,7 @@ import type { Agent } from "@/agent/agent";
 import type { Resources } from "@/agent/resources";
 import type { EmitFunction, PluginEvent } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
+import { newId } from "@/shared/prefixed-id";
 import { z } from "zod";
 import type { CoreEvent, corePlugin } from "../plugin";
 import { Generation, type GenerationChunk } from "./generation";
@@ -70,7 +71,7 @@ export class GenerationOrchestrator {
   }
 
   #processDecideEvent(generation: Generation, event: Extract<CoreEvent, { type: "agent.decide" }>) {
-    const id = crypto.randomUUID();
+    const id = newId("decide");
     this.#decidePromises.push({
       id,
       event,
@@ -78,7 +79,7 @@ export class GenerationOrchestrator {
         const result = await this.#agent.models.llm.generateObject({
           messages: [
             {
-              id: crypto.randomUUID(),
+              id: newId("message"),
               createdAt: Date.now(),
               lastUpdated: Date.now(),
               role: "system",
@@ -117,7 +118,7 @@ export class GenerationOrchestrator {
           }),
         });
         if (result.success && result.data.shouldContinue && generation.status === "idle") {
-          this.#emit({ type: "agent.continue", data: event.data, urgent: true });
+          this.#emit({ type: "agent.continue", data: event.data, urgent: false });
         }
 
         // Remove the promise from the list

@@ -1,4 +1,5 @@
 import { klona } from "@/shared/klona";
+import { newId } from "@/shared/prefixed-id";
 import {
   type CreateMessageInput,
   type Message,
@@ -19,7 +20,7 @@ export class History {
   }
 
   generateId() {
-    return crypto.randomUUID();
+    return newId("message");
   }
 
   getMessage(id: string) {

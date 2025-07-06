@@ -160,23 +160,23 @@ export const corePlugin = definePlugin("core")
   })
   .methods({
     createMessage: ({ emit }, message: CreateMessageInput) =>
-      emit({ type: "messages.create", data: message, urgent: true }),
+      emit({ type: "messages.create", data: message, urgent: false }),
     updateMessage: ({ emit }, message: UpdateMessageInput) =>
-      emit({ type: "messages.update", data: message, urgent: true }),
+      emit({ type: "messages.update", data: message, urgent: false }),
     continue: (
       { emit },
       params: Extract<Parameters<typeof emit>[0], { type: "agent.continue" }>["data"],
-    ) => emit({ type: "agent.continue", data: params, urgent: true }),
+    ) => emit({ type: "agent.continue", data: params, urgent: false }),
     decide: (
       { emit },
       params: Extract<Parameters<typeof emit>[0], { type: "agent.decide" }>["data"],
-    ) => emit({ type: "agent.decide", data: params, urgent: true }),
+    ) => emit({ type: "agent.decide", data: params, urgent: false }),
     say: ({ emit }, params: Extract<Parameters<typeof emit>[0], { type: "agent.say" }>["data"]) =>
-      emit({ type: "agent.say", data: params, urgent: true }),
+      emit({ type: "agent.say", data: params, urgent: false }),
     interrupt: (
       { emit },
       params: Extract<Parameters<typeof emit>[0], { type: "agent.interrupt" }>["data"],
-    ) => emit({ type: "agent.interrupt", data: params, urgent: true }),
+    ) => emit({ type: "agent.interrupt", data: params, urgent: false }),
   })
   // 1. Handle agent' status changes
   .addEffect("handle-status", ({ event, context }) => {
@@ -505,7 +505,7 @@ export const corePlugin = definePlugin("core")
               toolOutput: result.output,
             },
           },
-          urgent: true,
+          urgent: false,
         });
       } catch (error) {
         emit({
@@ -517,7 +517,7 @@ export const corePlugin = definePlugin("core")
               toolError: JSON.stringify(serializeError(error)),
             },
           },
-          urgent: true,
+          urgent: false,
         });
       }
 
