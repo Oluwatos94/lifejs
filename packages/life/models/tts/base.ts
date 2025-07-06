@@ -33,18 +33,23 @@ export interface TTSGenerateJob {
 export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
   config: z.infer<ConfigSchema>;
 
+  /** ms per token */
   #pace = new WeightedAverage();
   #jobsFullText: Record<string, string> = {};
-  #jobsRemainingText: Record<string, string> = {};
   #jobsFullAudio: Record<string, Int16Array> = {};
+  #jobsTakenText: Record<string, string> = {};
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {
     this.config = configSchema.parse({ ...config });
 
     // Start a minimal generation on instantion, so pace is set
-    this.generate().then((job) =>
-      job.pushText("Isn't Life beautiful? Are you talking about the Typescript framework?"),
-    );
+    this.generate().then(async (job) => {
+      job.pushText("Isn't Life beautiful? Are you talking about the Typescript framework?");
+      for await (const chunk of job.getStream()) {
+        if (chunk.type === "end") break;
+      }
+      console.log("TTS INIT DONE.");
+    });
   }
 
   protected createGenerateJob(): TTSGenerateJob {
@@ -59,10 +64,6 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
         if (!this.#jobsFullText[jobId]) this.#jobsFullText[jobId] = "";
         this.#jobsFullText[jobId] += text;
 
-        // Append the text chunk to the remaining text
-        if (!this.#jobsRemainingText[jobId]) this.#jobsRemainingText[jobId] = "";
-        this.#jobsRemainingText[jobId] += text;
-
         this._onGeneratePushText(job, text);
       },
       raw: {
@@ -72,7 +73,6 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
           if (chunk.type === "content") {
             // Retrieve the voice chunk and its duration
             const voiceChunk = chunk.voiceChunk;
-            const voiceDurationMs = audioChunkToMs(voiceChunk);
 
             // Append the voice chunk to the full audio
             if (!this.#jobsFullAudio[jobId]) this.#jobsFullAudio[jobId] = new Int16Array(0);
@@ -83,23 +83,32 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
 
             // If the TTS provider doesn't already provide text transcripts, estimate it
             if (!chunk.textChunk) {
-              const remainingText = this.#jobsRemainingText[jobId] ?? "";
-              const tokensCount = Math.ceil(voiceDurationMs / this.#pace.average);
-              const { taken, rest } = tokenizer.take(remainingText, tokensCount);
-              chunk.textChunk = taken;
-              chunk.durationMs = voiceDurationMs;
-              this.#jobsRemainingText[jobId] = rest;
+              const totalVoiceDurationMs = audioChunkToMs(this.#jobsFullAudio[jobId]);
+              const tokensCount = Math.floor(totalVoiceDurationMs / this.#pace.average);
+              const { taken: newTaken } = tokenizer.take(
+                this.#jobsFullText[jobId] ?? "",
+                tokensCount,
+              );
+              const alreadyTaken = this.#jobsTakenText[jobId] ?? "";
+              chunk.textChunk = newTaken.replace(alreadyTaken, "");
+              this.#jobsTakenText[jobId] = newTaken;
             }
 
             // If the TTS provider doesn't already provide audio duration, estimate it
-            if (!chunk.durationMs) chunk.durationMs = voiceDurationMs;
+            if (!chunk.durationMs) {
+              const voiceDurationMs = audioChunkToMs(voiceChunk);
+              chunk.durationMs = voiceDurationMs;
+            }
           }
 
           // Handle end chunks
           if (chunk.type === "end") {
             // If some text remains, push those to queue empty audio
-            const remainingText = this.#jobsRemainingText[jobId] as string;
-            if (remainingText.trim()) {
+            const remainingText = (this.#jobsFullText[jobId] ?? "").replace(
+              this.#jobsTakenText[jobId] ?? "",
+              "",
+            );
+            if (remainingText.trimEnd().length) {
               queue.push({
                 type: "content",
                 voiceChunk: new Int16Array(0),
@@ -122,7 +131,7 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
 
             // Clean up job data
             this.#jobsFullText[jobId] = "";
-            this.#jobsRemainingText[jobId] = "";
+            this.#jobsTakenText[jobId] = "";
             this.#jobsFullAudio[jobId] = new Int16Array(0);
           }
 
@@ -130,7 +139,7 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
           if (chunk.type === "error") {
             // Clean up on error
             this.#jobsFullText[jobId] = "";
-            this.#jobsRemainingText[jobId] = "";
+            this.#jobsTakenText[jobId] = "";
             this.#jobsFullAudio[jobId] = new Int16Array(0);
           }
 

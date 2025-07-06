@@ -1,13 +1,11 @@
 import { ensureServer } from "@/shared/ensure-server";
 ensureServer("transport.index.server");
-
 import { z } from "zod";
-import { livekitConnectorConfigSchema } from "./providers/livekit/config";
-import { LiveKitServerTransport } from "./providers/livekit/server";
+import { LiveKitServerTransport, livekitServerConfigSchema } from "./providers/livekit/server";
 
 // Providers
 export const serverTransportProviders = {
-  livekit: { class: LiveKitServerTransport, configSchema: livekitConnectorConfigSchema },
+  livekit: { class: LiveKitServerTransport, configSchema: livekitServerConfigSchema },
 } as const;
 
 export type ServerTransportProvider =

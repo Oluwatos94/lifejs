@@ -1,92 +1,73 @@
 import type { Agent } from "@/agent/agent";
-import type { ToolRequest } from "@/agent/resources";
+import type { Resources } from "@/agent/resources";
+import type { EmitFunction, PluginEvent } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
-import { throttledAudioQueue } from "@/shared/throttled-audio-queue";
 import { z } from "zod";
+import type { CoreEvent, corePlugin } from "../plugin";
 import { Generation, type GenerationChunk } from "./generation";
-import type {
-  ContinueOperation,
-  DecideOperation,
-  GenerationOperation,
-  ResourcesResponseOperation,
-  SayOperation,
-  ToolResponseOperation,
-} from "./operations";
-
-// Notifications
-type Notification =
-  | { type: "content-chunk"; data: Extract<GenerationChunk, { type: "content" }> }
-  | { type: "speech-status"; data: boolean }
-  | {
-      type: "interruption";
-      data: { reason: string; forced: boolean; author: "user" | "application" };
-    };
-type NotificationListenerCallback<Type extends Notification["type"] = Notification["type"]> = (
-  data: Extract<Notification, { type: Type }>["data"],
-) => void;
-type NotificationListener = { type: Notification["type"]; callback: NotificationListenerCallback };
 
 // Orchestrator
 export class GenerationOrchestrator {
   #agent: Agent;
-  #requestTool: (request: ToolRequest) => void;
-  #requestResources: () => void;
+  #emit: EmitFunction<typeof corePlugin._definition.events>;
+  #coreQueueSome: (predicate: (event: CoreEvent) => boolean) => boolean;
+  #consumeQueue: AsyncQueue<Generation> = new AsyncQueue();
 
-  #operationsQueue: AsyncQueue<GenerationOperation> = new AsyncQueue();
-  #startedGenerationsQueue: AsyncQueue<Generation> = new AsyncQueue();
-  #scheduleRequestQueue: AsyncQueue<void> = new AsyncQueue();
   #generations: Generation[] = [];
   #decidePromises: {
     id: string;
-    operation: DecideOperation;
+    event: Extract<CoreEvent, { type: "agent.decide" }>;
     promise: Promise<void>;
-    cancel: () => DecideOperation;
+    cancel: () => Extract<CoreEvent, { type: "agent.decide" }>;
   }[] = [];
-  #listeners: NotificationListener[] = [];
+  #generationsResourcesRequestsIds: Record<string, string> = {};
+  #resourcesResponses: Record<string, Resources> = {};
 
   constructor(params: {
     agent: Agent;
-    requestTool: (request: ToolRequest) => void;
-    requestResources: () => void;
+    emit: (event: PluginEvent<typeof corePlugin._definition.events, "input">) => string;
+    coreQueueSome: (predicate: (event: CoreEvent) => boolean) => boolean;
   }) {
-    const { agent, requestTool, requestResources } = params;
-    this.#agent = agent;
-    this.#requestTool = requestTool;
-    this.#requestResources = requestResources;
+    this.#agent = params.agent;
+    this.#emit = params.emit;
+    this.#coreQueueSome = params.coreQueueSome;
 
     // Start the orchestrator
-    this.#processOperations();
-    this.#processGenerations();
+    this.#consumeGenerations();
   }
 
-  on<Type extends Notification["type"]>(type: Type, callback: NotificationListenerCallback<Type>) {
-    this.#listeners.push({ type, callback } as unknown as NotificationListener);
-  }
-
-  pushOperation(operation: GenerationOperation) {
-    this.#operationsQueue.push(operation);
-  }
-
-  #notify(type: Notification["type"], data: Notification["data"]) {
-    for (const listener of this.#listeners) if (listener.type === type) listener.callback(data);
-  }
-
-  #handleInterrupt(reason: string, force = false) {
+  #processInterruptEvent(event: Extract<CoreEvent, { type: "agent.interrupt" }>) {
+    let interrupted = false;
+    // Try interrupting all generations
     for (const generation of this.#generations) {
-      if (!generation.preventInterruption || force) generation.stop();
+      if (generation.status === "running" && (generation.canInterrupt() || event.data.force)) {
+        generation.stop(true);
+        this.#generations = this.#generations.filter((g) => g !== generation);
+        interrupted = true;
+      }
     }
-    this.#notify("interruption", {
-      reason,
-      forced: force,
-      author: "application",
-    });
+    // If at least one generation was interrupted, notify the interruption
+    if (interrupted) {
+      this.#emit({
+        type: "agent.interrupted",
+        data: {
+          reason: event.data.reason,
+          forced: event.data.force ?? false,
+          author: "application",
+        },
+      });
+    }
   }
 
-  #handleDecide(operation: DecideOperation) {
+  #processResourcesResponseEvent(event: Extract<CoreEvent, { type: "agent.resources-response" }>) {
+    this.#resourcesResponses[event.data.requestId] = event.data;
+  }
+
+  #processDecideEvent(generation: Generation, event: Extract<CoreEvent, { type: "agent.decide" }>) {
     const id = crypto.randomUUID();
     this.#decidePromises.push({
       id,
-      operation,
+      event,
       promise: (async () => {
         const result = await this.#agent.models.llm.generateObject({
           messages: [
@@ -97,13 +78,21 @@ export class GenerationOrchestrator {
               role: "system",
               content: `
                     # Instructions
-                    You're an agent helping another agent deciding whether they should react to a
-                    given new information, or just be passive. You'll be provided the most recent
-                    conversation history between the user and the agent, and the new piece of
-                    information. From these you'll output a 'shouldReact' boolean, indicating whether
+                    You're a decision assistant helping another assistant itself directly discussing with
+                    the user and interacting with the application. A new system information has been received
+                    and your role is to decide whether the other assistant should react to this new information,
+                    or just be passive. You'll be provided the conversation history including the new information,
+                    as part of the last system messages.
+
+                    ## Output
+                    Once you've taken your decision, you'll output a 'shouldReact' boolean, indicating whether
                     that new information is worth reacting to and could help the conversation goal.
+
                     ## Recent conversation history
-                    ${operation.messages
+                    Here is the recent conversation history, including the new information.
+                    Should the agent react to the most recent system messages?
+
+                    ${event.data.messages
                       .map((message) => {
                         if (
                           message.role === "user" ||
@@ -121,133 +110,216 @@ export class GenerationOrchestrator {
             shouldContinue: z.boolean(),
           }),
         });
-        if (result.success && result.data.shouldContinue)
-          this.pushOperation({ ...operation, type: "continue" });
+        if (result.success && result.data.shouldContinue && generation.status === "idle") {
+          this.#emit({ type: "agent.continue", data: event.data, urgent: true });
+        }
 
         // Remove the promise from the list
         this.#decidePromises = this.#decidePromises.filter((decide) => decide.id !== id);
       })(),
       cancel: () => {
-        // TODO:Stop LLM job -> this.#agent.models.llm.stopJob(id);
         this.#decidePromises = this.#decidePromises.filter((decide) => decide.id !== id);
-        return operation;
+        return event;
       },
     });
   }
 
-  #handleSchedule() {
-    // If there are remaining operations to process, wait
-    if (this.#operationsQueue.length() > 0) return;
-
-    // If there is more than one generation request, wait the last one
-    if (this.#scheduleRequestQueue.length() > 0) return;
-
-    // Retrieve last generation
-    const generation = this.#generations[0];
-
-    // If there is no generation, wait
-    if (!generation) return;
-
-    // If the generation has ended, remove it, and restart
-    if (generation.status === "ended") {
-      this.#generations.shift();
-      this.#operationsQueue.push({ type: "schedule" });
-      return;
-    }
-
-    // If the generation is running, wait
-    // TODO: In the future, if the generation is about to end, start next one for reduced latency
-    // TODO: In the future, if the next generation is a smooth interrupt, sync both generations for a smooth transition
-    // - For that later, add a stopAfter() method to generations, which prompt them to stop streaming after that time
-    // - And start the next generation from the end of the previous one
-    if (generation.status === "running") return;
-
-    // Start the generation
-    generation.start();
-    this.#startedGenerationsQueue.push(generation);
-  }
-
-  #handleResourcesResponse(operation: ResourcesResponseOperation) {
-    const lastGeneration = this.#generations[0];
-    if (lastGeneration?.status === "waiting" && lastGeneration.waitingFor === "resources")
-      lastGeneration.addResources(operation.resources);
-  }
-
-  #handleToolResponse(operation: ToolResponseOperation) {
-    const lastGeneration = this.#generations[0];
-
-    if (lastGeneration?.status === "waiting" && lastGeneration.waitingFor === "tools")
-      lastGeneration.addToolResponse(operation.message.toolId);
-  }
-
-  #handleInsert(operation: ContinueOperation | SayOperation) {
-    if (operation.interrupt === "abrupt")
-      // - In case an interrupting insert is requested, handle
-      this.#handleInterrupt("Interrupted by another operation.");
-    else if (operation.interrupt === "smooth") {
-      throw new Error("Smooth interrupt is not implemented yet.");
-      // Todo: In the future, create a new generation with isSmoothInterrupt = true
-    }
-
-    // - Retrieve or create the first non-running generation
-    let generation = this.#generations.find((generation) => generation.status === "idle");
-    if (!generation) {
-      generation = new Generation(this.#agent);
-      this.#generations.push(generation);
-    }
+  #processInsertEvent(
+    generation: Generation,
+    event: Extract<CoreEvent, { type: "agent.continue" | "agent.say" }>,
+  ) {
+    // In case an abrupt intrerupt insert is requested, try first interrupting the current generation
+    if (event.data.interrupt === "abrupt")
+      this.#processInterruptEvent({
+        id: "whatever",
+        type: "agent.interrupt",
+        data: {
+          reason: "Interrupted by another operation.",
+          author: "application",
+        },
+      });
 
     // - Cancel and merge ongoing decide promises
     for (const decide of this.#decidePromises) {
       decide.cancel();
-      generation.addContinue({ ...decide.operation, type: "continue" });
+      generation.addInsertEvent({
+        id: "whatever",
+        type: "agent.continue",
+        data: decide.event.data,
+      });
     }
 
     // - Add the initial operation to the generation
-    if (operation.type === "continue") generation.addContinue(operation);
-    else if (operation.type === "say") generation.addSay(operation);
+    generation.addInsertEvent(event);
 
-    // - Schedule generations
-    this.#operationsQueue.push({ type: "schedule" });
+    // If a smooth interruption is requested, notify the scheduler
+    return event.data.interrupt === "smooth";
   }
 
-  async #processOperations() {
-    for await (const operation of this.#operationsQueue) {
-      // If an interrupt is received, try interrupting generations
-      if (operation.type === "interrupt")
-        return this.#handleInterrupt(operation.reason, operation.force);
-      // Or if a decide is received, start a promise that will possibly emit a continue operation
-      else if (operation.type === "decide") return this.#handleDecide(operation);
-      // Or if a resources response is received, add it to the last generation if this one is still waiting for it
-      else if (operation.type === "resources-response")
-        return this.#handleResourcesResponse(operation);
-      // Or if operation is a tool result, add it to the last generation if this one is still waiting for it
-      else if (operation.type === "tool-response") return this.#handleToolResponse(operation);
-      // Or if a schedule is received, try scheduling the next generation
-      else if (operation.type === "schedule") return this.#handleSchedule();
-      // Else, if it's an insert operation (continue/say)
-      else return this.#handleInsert(operation);
+  #isGenerationEvent(event: CoreEvent) {
+    return (
+      event.type === "agent.continue" ||
+      event.type === "agent.say" ||
+      event.type === "agent.decide" ||
+      event.type === "agent.resources-response" ||
+      event.type === "agent.interrupt" ||
+      event.type === "agent.generation-end"
+    );
+  }
+
+  #isQueueBusy() {
+    return this.#coreQueueSome((event) => this.#isGenerationEvent(event));
+  }
+
+  // If the generation is running, wait
+  // TODO: In the future, if the next generation is a smooth interrupt, sync both generations for a smooth transition
+  // - For that later, add a stopAfter() method to generations, which prompt them to stop streaming after that time
+  // - And start the next generation from the end of the previous one
+  // if (generation.status === "running") continue;
+  scheduleGenerations(event?: CoreEvent): unknown {
+    // Ignore non-generation events
+    if (!event || !this.#isGenerationEvent(event)) return;
+
+    // If there are remaining operations to process, wait
+    if (this.#isQueueBusy()) return console.log("😡 QUEUE WAS BUSY");
+
+    // Filter out ended generations
+    this.#generations = this.#generations.filter((generation) => generation.status !== "ended");
+
+    // Retrieve first idle generation
+    let generation = this.#generations.find((generation) => generation.status === "idle");
+
+    // If there is no idle generation, create one
+    if (!generation) {
+      generation = new Generation({ agent: this.#agent });
+      this.#generations.push(generation);
+    }
+
+    // Handle the event if (any)
+    if (event.type === "agent.continue") this.#processInsertEvent(generation, event);
+    else if (event.type === "agent.say") this.#processInsertEvent(generation, event);
+    else if (event.type === "agent.decide") this.#processDecideEvent(generation, event);
+    else if (event.type === "agent.interrupt") this.#processInterruptEvent(event);
+    else if (event.type === "agent.resources-response") this.#processResourcesResponseEvent(event);
+
+    // If the generation is not ready to start yet, return
+    if (!generation.canStart()) return;
+
+    // If that was a continue operation, request resources
+    if (event.type === "agent.continue") {
+      const requestId = this.#emit({ type: "agent.resources-request" });
+      this.#generationsResourcesRequestsIds[generation.id] = requestId;
+    }
+
+    // If the generation has continue but no resources yet, wait
+    if (
+      generation.needContinue &&
+      !((this.#generationsResourcesRequestsIds[generation.id] ?? "") in this.#resourcesResponses)
+    )
+      return;
+
+    // Find any currently running generation
+    const runningGeneration = this.#generations.find((g) => g.status === "running");
+
+    if (runningGeneration) {
+      // DO NOTHING FOR NOW
+      // - If the running generation is about to end, start the next one
+      // - If smooth interruption is requested, sync both generations for a smooth transition
+      //   - If not possible interrupt abruptly
+    }
+
+    // Or if there is no running generation, start the generation immediately
+    else {
+      const resourceRequestId = this.#generationsResourcesRequestsIds[generation.id];
+      this.#emit({ type: "agent.generation-start" });
+      generation.start(resourceRequestId ? this.#resourcesResponses[resourceRequestId] : undefined);
+      this.#consumeQueue.push(generation);
     }
   }
 
-  async #processGenerations() {
-    // Add a throttle to send max. 300ms of upfront chunks to the user
+  async #consumeGenerations() {
+    // Add a throttle to send max. 100ms of upfront chunks to the user
     // This allows keeping interruptions management on the server.
-    const limiter = throttledAudioQueue(10, 300);
+    const limiter = throttledGenerationQueue(100);
+    let agentIsSpeaking = false;
 
-    for await (const generation of this.#startedGenerationsQueue) {
+    for await (const generation of this.#consumeQueue) {
       for await (const chunk of limiter(generation.queue)) {
-        // If this is an end chunk, schedule the next generation
-        if (chunk.type === "end") {
-          this.#operationsQueue.push({ type: "schedule" });
+        // Forward content chunks
+        if (chunk.type === "content") {
+          if (chunk.textChunk.length)
+            this.#emit({ type: "agent.text-chunk", data: { textChunk: chunk.textChunk } });
+          if (chunk.voiceChunk.length) {
+            this.#emit({ type: "agent.voice-chunk", data: { voiceChunk: chunk.voiceChunk } });
+            if (!agentIsSpeaking) {
+              this.#emit({ type: "agent.voice-start" });
+              agentIsSpeaking = true;
+            }
+          }
+        }
+        // Forward tool requests
+        else if (chunk.type === "tool-requests")
+          this.#emit({ type: "agent.tool-requests", data: chunk.requests ?? [] });
+        // Or if this is the end of the generation, try scheduling the next generation
+        else if (chunk.type === "end") {
+          if (agentIsSpeaking) {
+            this.#emit({ type: "agent.voice-end" });
+            agentIsSpeaking = false;
+          }
+          this.#emit({ type: "agent.generation-end" });
           break;
         }
-        // Or if this is a tool request
-        else if (chunk.type === "tool-request") this.#requestTool(chunk.toolRequest);
-        // Or if this is a resources request
-        else if (chunk.type === "resources-request") this.#requestResources();
-        // Or if this is a content chunk
-        else this.#notify("content-chunk", chunk);
       }
     }
   }
+}
+
+/**
+ * Specialized throttling function for generation chunks that uses actual audio durations
+ * instead of fixed cadence. This prevents too much audio from being buffered upfront.
+ *
+ * @param leadMs Maximum positive/negative lead you will allow.
+ * @param sampleRate Sample rate of the audio chunks (default: 16000)
+ */
+function throttledGenerationQueue(leadMs = 300, sampleRate = 16000) {
+  /** Wall-clock time we pegged the *first* chunk to. */
+  let anchorWallTime = Date.now();
+
+  /** Total audio duration we have *already* forwarded in milliseconds. */
+  let totalAudioDurationMs = 0;
+
+  /** Small helper: wait `ms` milliseconds. */
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  return async function* <T extends GenerationChunk>(source: AsyncIterable<T>): AsyncIterable<T> {
+    for await (const chunk of source) {
+      // For content chunks, use actual audio duration
+      if (chunk.type === "content" && chunk.voiceChunk) {
+        // Calculate actual audio duration in milliseconds
+        const chunkDurationMs = (chunk.voiceChunk.length / sampleRate) * 1000;
+
+        // ----- 1. Compute current lead ---------------------------------------
+        const wallElapsed = Date.now() - anchorWallTime;
+        let lead = totalAudioDurationMs - wallElapsed; // +ahead / –behind
+
+        // ----- 2. If we're *too far behind*, slide the anchor forward --------
+        if (lead < -leadMs) {
+          anchorWallTime += -lead - leadMs; // move anchor just enough
+          lead = -leadMs; // now clamped to lower bound
+        }
+
+        // ----- 3. If we're *too far ahead*, pause until we're inside window --
+        if (lead > leadMs) {
+          await sleep(lead - leadMs); // throttle down
+        }
+
+        // ----- 4. Emit the chunk and advance counters ------------------------
+        yield chunk;
+        totalAudioDurationMs += chunkDurationMs;
+      } else {
+        // For non-content chunks (tool-requests, resources-request, end), emit immediately
+        yield chunk;
+      }
+    }
+  };
 }

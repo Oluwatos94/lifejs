@@ -1,19 +1,29 @@
 import { Room, RoomEvent } from "livekit-client";
-import type { z } from "zod";
+import { z } from "zod";
 import { ClientTransportBase, type ClientTransportEvent } from "../base/client";
-import { livekitConnectorConfigSchema } from "./config";
 
-export class LiveKitClientTransport extends ClientTransportBase<
-  typeof livekitConnectorConfigSchema
-> {
+// - Config
+// export const livekitClientConfigSchema = z.object({
+//   serverUrl: z
+//     .string()
+//     .url()
+//     .default(process.env.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
+// });
+// export type LiveKitClientConfig<T extends "input" | "output"> = T extends "input"
+//   ? z.input<typeof livekitClientConfigSchema>
+//   : z.output<typeof livekitClientConfigSchema>;
+
+// - Transport
+export class LiveKitClientTransport extends ClientTransportBase<z.AnyZodObject> {
   isConnected = false;
   room: Room | null = null;
   listeners: Partial<
     Record<ClientTransportEvent["type"], ((event: ClientTransportEvent) => void)[]>
   > = {};
 
-  constructor(config: z.infer<typeof livekitConnectorConfigSchema>) {
-    super(livekitConnectorConfigSchema, config);
+  constructor() {
+    super(z.object({}), {});
+    this.config.serverUrl = process.env.LIVEKIT_SERVER_URL ?? "ws://localhost:7880";
   }
 
   ensureConnected(
@@ -39,6 +49,10 @@ export class LiveKitClientTransport extends ClientTransportBase<
       adaptiveStream: true,
       dynacast: true,
       disconnectOnPageLeave: true,
+      publishDefaults: {
+        dtx: true,
+        red: true,
+      },
     });
     this.room.on(RoomEvent.TrackSubscribed, (track) => {
       const element = track.attach();

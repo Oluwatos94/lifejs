@@ -42,7 +42,6 @@ function createMessage(role: Message["role"], content: string): Message {
 
 function createSearchTool(): ToolDefinition {
   return {
-    id: "search",
     name: "search",
     description: "Search for information on the web",
     inputSchema: z.object({
@@ -52,14 +51,14 @@ function createSearchTool(): ToolDefinition {
       result: z.string().describe("The search result"),
     }),
     run: async (input: object) => ({
-      result: `Mock search result for: ${(input as { query: string }).query}`,
+      success: true,
+      output: { result: `Mock search result for: ${(input as { query: string }).query}` },
     }),
   };
 }
 
 function createCalculatorTool(): ToolDefinition {
   return {
-    id: "calculator",
     name: "calculator",
     description: "Perform mathematical calculations",
     inputSchema: z.object({
@@ -68,13 +67,12 @@ function createCalculatorTool(): ToolDefinition {
     outputSchema: z.object({
       result: z.number().describe("The calculation result"),
     }),
-    run: async (input: object) => ({ result: Math.random() * 100 }),
+    run: async (input: object) => ({ success: true, output: { result: Math.random() * 100 } }),
   };
 }
 
 function createWeatherTool(): ToolDefinition {
   return {
-    id: "weather",
     name: "weather",
     description: "Get weather information for a location",
     inputSchema: z.object({
@@ -85,6 +83,7 @@ function createWeatherTool(): ToolDefinition {
       condition: z.string().describe("Weather condition"),
     }),
     run: async (input: object) => ({
+      success: true,
       temperature: Math.round(Math.random() * 30 + 10),
       condition: "Sunny",
     }),
@@ -101,7 +100,7 @@ async function consumeStream(
 ) {
   const results = {
     content: "",
-    tools: [] as Array<{ id: string; input: unknown }>,
+    tools: [] as Array<{ name: string; input: unknown }>,
     hasContent: false,
     toolsCalled: 0,
     error: null as string | null,
@@ -138,7 +137,7 @@ async function consumeStream(
             results.hasContent = true;
             checkInactivity();
           } else if (chunk.type === "tool") {
-            results.tools.push({ id: String(chunk.toolId), input: chunk.toolInput });
+            results.tools.push({ name: String(chunk.toolName), input: chunk.toolInput });
             results.toolsCalled++;
             checkInactivity();
           } else if (chunk.type === "end") {
@@ -247,7 +246,9 @@ async function testProvider(providerConfig: ProviderConfig) {
     if (result.error) {
       console.log(`❌ Single Tool: ${result.error}`);
     } else if (result.toolsCalled > 0) {
-      const toolDetails = result.tools.map((t) => `${t.id}(${JSON.stringify(t.input)})`).join(", ");
+      const toolDetails = result.tools
+        .map((t) => `${t.name}(${JSON.stringify(t.input)})`)
+        .join(", ");
       console.log(`✅ Single Tool: ${result.toolsCalled} tool(s) called - ${toolDetails}`);
       console.log(`   Content generated: ${result.hasContent ? "Yes" : "No"}`);
       passed++;
@@ -281,12 +282,12 @@ async function testProvider(providerConfig: ProviderConfig) {
     if (result.error) {
       console.log(`❌ Parallel Tools: ${result.error}`);
     } else {
-      const uniqueTools = new Set(result.tools.map((t) => t.id));
+      const uniqueTools = new Set(result.tools.map((t) => t.name));
       const isParallel = uniqueTools.size >= 2;
 
       if (result.toolsCalled >= 2 && isParallel) {
         const toolDetails = result.tools
-          .map((t) => `${t.id}(${JSON.stringify(t.input)})`)
+          .map((t) => `${t.name}(${JSON.stringify(t.input)})`)
           .join(", ");
         console.log(
           `✅ Parallel Tools: ${result.toolsCalled} tool(s) called across ${uniqueTools.size} types`,
@@ -295,7 +296,7 @@ async function testProvider(providerConfig: ProviderConfig) {
         passed++;
       } else if (result.toolsCalled > 0) {
         const toolDetails = result.tools
-          .map((t) => `${t.id}(${JSON.stringify(t.input)})`)
+          .map((t) => `${t.name}(${JSON.stringify(t.input)})`)
           .join(", ");
         console.log(
           `⚠️  Partial Tools: ${result.toolsCalled} tool(s), ${uniqueTools.size} types - ${toolDetails}`,
@@ -332,7 +333,7 @@ async function testProvider(providerConfig: ProviderConfig) {
     if (result.error) {
       console.log(`❌ Tool Chaining: ${result.error}`);
     } else if (result.toolsCalled >= 1) {
-      const sequence = result.tools.map((t) => t.id).join(" → ");
+      const sequence = result.tools.map((t) => t.name).join(" → ");
       console.log(`✅ Tool Chaining: ${result.toolsCalled} tool(s) called`);
       console.log(`   Sequence: ${sequence}`);
       console.log(`   Content generated: ${result.hasContent ? "Yes" : "No"}`);
@@ -392,6 +393,4 @@ async function runTests() {
 
 export { runTests };
 
-if (require.main === module) {
-  runTests();
-}
+await runTests();

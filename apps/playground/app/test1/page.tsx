@@ -1,15 +1,16 @@
 "use client";
-// import { AgentClient } from "life/client";
+import { AgentClient } from "life/client";
 import { useState } from "react";
+import { fetchToken } from "./actions";
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
 
   const startDiscussion = async () => {
-    // const token = await fetchToken();
-    // setToken(token);
-    // const client = new AgentClient();
-    // await client.inviteAgent("room-1", token);
+    const token = await fetchToken();
+    setToken(token);
+    const client = new AgentClient({});
+    await client.inviteAgent("room-1", token);
   };
 
   return (

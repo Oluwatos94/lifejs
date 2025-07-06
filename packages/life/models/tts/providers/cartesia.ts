@@ -48,7 +48,7 @@ export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfigSchema> {
         contextId: job.id,
         modelId: "sonic-2",
         language: "en",
-        voice: { mode: "id", id: "bf0a246a-8642-498a-9950-80c35e9276b5" },
+        voice: { mode: "id", id: "e8e5fffb-252c-436d-b842-8879b84445b6" },
         transcript: text,
         outputFormat: {
           container: "raw",
@@ -59,11 +59,14 @@ export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfigSchema> {
     }
     // Else, initialize a new job response
     else {
+      // Set the job to have history
+      this.#initializedJobsIds.push(job.id);
+
       const response = await this.#socket.send({
         contextId: job.id,
         modelId: "sonic-2",
         language: "en",
-        voice: { mode: "id", id: "bf0a246a-8642-498a-9950-80c35e9276b5" },
+        voice: { mode: "id", id: "e8e5fffb-252c-436d-b842-8879b84445b6" },
         transcript: text,
         continue: true,
         outputFormat: {
@@ -72,9 +75,6 @@ export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfigSchema> {
           sampleRate: 16000,
         },
       });
-
-      // Set the job to have history
-      this.#initializedJobsIds.push(job.id);
 
       // Receive the job's messages
       response.on("message", (msgString: string) => {

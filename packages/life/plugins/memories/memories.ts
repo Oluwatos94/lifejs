@@ -1,5 +1,5 @@
-import { type Message, messageSchema, toolDefinitionSchema } from "@/agent/resources";
-import { definePlugin } from "@/plugins/plugin";
+import { type Message, messageSchema, toolSchema } from "@/agent/resources";
+import { definePlugin } from "@/plugins/definition";
 import { z } from "zod";
 
 interface Memory {
@@ -13,12 +13,12 @@ const memoriesPlugin = definePlugin("memories")
   .addInterceptor(
     "intercept-core-resources-requests",
     {
-      dependencyId: "core",
+      dependencyName: "core",
       dependencyEvents: {
         "agent.resources-response": {
           dataSchema: z.object({
             history: z.array(messageSchema),
-            tools: z.array(toolDefinitionSchema),
+            tools: z.array(toolSchema),
           }),
         },
       },

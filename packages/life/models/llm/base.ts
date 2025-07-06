@@ -6,7 +6,7 @@ import type { z } from "zod";
 // LLMBase.generateMessage()
 export type LLMGenerateMessageStreamChunk =
   | { type: "content"; content: string }
-  | { type: "tool"; toolId: string; toolInput: Record<string, unknown> }
+  | { type: "tool"; tool: { id: string; name: string; input: Record<string, unknown> } }
   | { type: "end" }
   | { type: "error"; error: string };
 

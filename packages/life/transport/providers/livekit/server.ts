@@ -11,26 +11,38 @@ import {
   TrackSource,
   dispose,
 } from "@livekit/rtc-node";
-import type { z } from "zod";
+import { z } from "zod";
 import { ServerTransportBase, type ServerTransportEvent } from "../base/server";
-import { livekitConnectorConfigSchema } from "./config";
 
-export class LiveKitServerTransport extends ServerTransportBase<
-  typeof livekitConnectorConfigSchema
-> {
+// - Config
+export const livekitServerConfigSchema = z.object({
+  serverUrl: z
+    .string()
+    .url()
+    .default(process.env.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
+  apiKey: z.string().default(process.env.LIVEKIT_API_KEY ?? "devkey"),
+  apiSecret: z.string().default(process.env.LIVEKIT_API_SECRET ?? "secret"),
+});
+export type LiveKitServerConfig<T extends "input" | "output"> = T extends "input"
+  ? z.input<typeof livekitServerConfigSchema>
+  : z.output<typeof livekitServerConfigSchema>;
+
+// - Transport
+export class LiveKitServerTransport extends ServerTransportBase<typeof livekitServerConfigSchema> {
   isConnected = false;
   room: Room | null = null;
   listeners: Partial<
     Record<ServerTransportEvent["type"], ((event: ServerTransportEvent) => void)[]>
   > = {};
-  source = new AudioSource(16_000, 1, 2000);
+  source = new AudioSource(16_000, 1, 1000000);
+  flushTimeout: NodeJS.Timeout | null = null;
 
   private audioBuffer: Int16Array = new Int16Array(0);
   private readonly FRAME_DURATION_MS = 20; // 20ms frames
   private readonly SAMPLES_PER_FRAME = (16000 * this.FRAME_DURATION_MS) / 1000; // 320 samples for 20ms at 16kHz
 
-  constructor(config: z.infer<typeof livekitConnectorConfigSchema>) {
-    super(livekitConnectorConfigSchema, config);
+  constructor(config: LiveKitServerConfig<"input">) {
+    super(livekitServerConfigSchema, config);
   }
 
   ensureConnected(
@@ -95,17 +107,19 @@ export class LiveKitServerTransport extends ServerTransportBase<
     const options = new TrackPublishOptions();
     options.source = TrackSource.SOURCE_MICROPHONE;
     await this.room.localParticipant?.publishTrack(track, options);
-
-    // Handle SIGINT
-    process.on("SIGINT", async () => {
-      await this.room?.disconnect();
-      await dispose();
-    });
   }
 
   async leaveRoom(): Promise<void> {
     this.ensureConnected("leaveRoom", this);
+
+    // Clear any pending flush timeout
+    if (this.flushTimeout) {
+      clearTimeout(this.flushTimeout);
+      this.flushTimeout = null;
+    }
+
     await this.room.disconnect();
+    await dispose();
     this.isConnected = false;
   }
 
@@ -140,21 +154,51 @@ export class LiveKitServerTransport extends ServerTransportBase<
     this.listeners[type].push(callback as (event: ServerTransportEvent) => void);
   }
 
+  async #flushAudioBuffer() {
+    if (this.audioBuffer.length > 0) {
+      console.log("flushing audio buffer");
+      // Pad with zeros or send partial frame
+      const paddedFrame = new Int16Array(this.SAMPLES_PER_FRAME);
+      paddedFrame.set(this.audioBuffer);
+      const audioFrame = new AudioFrame(paddedFrame, 16000, 1, this.SAMPLES_PER_FRAME);
+
+      try {
+        await this.source.captureFrame(audioFrame);
+      } catch (error) {
+        console.error("Error capturing flush audio frame:", error);
+      }
+
+      this.audioBuffer = new Int16Array(0);
+    }
+
+    // Clear the timeout reference
+    this.flushTimeout = null;
+  }
+
   async streamAudioChunk(chunk: Int16Array) {
     this.ensureConnected("streamAudioChunk", this);
+
+    // Clear the flush timeout (if any)
+    if (this.flushTimeout) clearTimeout(this.flushTimeout);
 
     // Add chunk to buffer
     this.audioBuffer = this.concatenateArrays(this.audioBuffer, chunk);
 
-    // Process complete frames
+    // Stream audio frames >= FRAME_DURATION_MS
     while (this.audioBuffer.length >= this.SAMPLES_PER_FRAME) {
       const frameData = this.audioBuffer.slice(0, this.SAMPLES_PER_FRAME);
       this.audioBuffer = this.audioBuffer.slice(this.SAMPLES_PER_FRAME);
 
       const audioFrame = new AudioFrame(frameData, 16000, 1, this.SAMPLES_PER_FRAME);
-
-      await this.source.captureFrame(audioFrame);
+      try {
+        await this.source.captureFrame(audioFrame);
+      } catch (error) {
+        console.error("Error capturing audio frame:", error);
+      }
     }
+
+    // Flush the audio buffer after FRAME_DURATION_MS
+    // this.flushTimeout = setTimeout(() => this.#flushAudioBuffer(), this.FRAME_DURATION_MS * 5);
   }
 
   private concatenateArrays(a: Int16Array, b: Int16Array): Int16Array {

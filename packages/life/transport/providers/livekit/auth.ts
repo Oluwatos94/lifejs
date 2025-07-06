@@ -1,16 +1,9 @@
 import type { GetTokenFunction } from "@/transport/auth";
 import { AccessToken } from "livekit-server-sdk";
 
-export const getToken: GetTokenFunction = async (roomName, participantId) => {
-  const apiKey = process.env.LIVEKIT_API_KEY;
-  const apiSecret = process.env.LIVEKIT_API_SECRET;
-
-  if (!apiKey || !apiSecret) {
-    throw new Error("LiveKit API key or secret not provided");
-  }
-
+export const getToken: GetTokenFunction<"livekit"> = async (config, roomName, participantId) => {
   // Create a token with the room name and participant name
-  const token = new AccessToken(apiKey, apiSecret, {
+  const token = new AccessToken(config.apiKey, config.apiSecret, {
     identity: participantId,
   });
 

@@ -50,11 +50,15 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfigSchema> {
       return {
         role: "assistant",
         content: message.content,
-        tool_calls: message.toolsRequests?.map((request) => ({
-          id: request.id,
-          function: { name: request.id, arguments: JSON.stringify(request.input) },
-          type: "function",
-        })),
+        ...(message.toolsRequests?.length
+          ? {
+              tool_calls: message.toolsRequests?.map((request) => ({
+                id: request.id,
+                function: { name: request.name, arguments: JSON.stringify(request.input) },
+                type: "function",
+              })),
+            }
+          : {}),
       };
     }
 
@@ -65,8 +69,8 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfigSchema> {
     if (message.role === "tool-response") {
       return {
         role: "tool",
-        tool_call_id: message.id,
-        content: JSON.stringify(message.output),
+        tool_call_id: message.toolId,
+        content: JSON.stringify(message.toolOutput),
       };
     }
 
@@ -81,7 +85,7 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfigSchema> {
     return {
       type: "function",
       function: {
-        name: tool.id,
+        name: tool.name,
         description: tool.description,
         parameters: zodToJsonSchema(tool.inputSchema),
       },
@@ -92,20 +96,25 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfigSchema> {
     return tools.map(this.#toOpenAITool);
   }
 
+  /**
+   * Generate a message with job management - returns jobId along with stream
+   */
   async generateMessage(
     params: Parameters<typeof LLMBase.prototype.generateMessage>[0],
   ): Promise<LLMGenerateMessageJob> {
+    // Create a new job
     const job = this.createGenerateMessageJob();
 
+    // Prepare tools and messages in OpenAI format
     const openaiTools = params.tools.length > 0 ? this.#toOpenAITools(params.tools) : undefined;
     const openaiMessages = this.#toOpenAIMessages(params.messages);
 
+    // Prepare job stream
     const stream = await this.#client.chat.completions.create(
       {
         model: this.config.model,
         temperature: this.config.temperature,
         messages: openaiMessages,
-        tools: openaiTools,
         stream: true,
         ...(openaiTools?.length
           ? {
@@ -114,76 +123,82 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfigSchema> {
             }
           : {}),
       },
-      { signal: job.raw.abortController.signal },
+      { signal: job.raw.abortController.signal }, // Allows the stream to be cancelled
     );
 
-    let pendingToolCalls: Record<
-      string,
-      {
-        id: string;
-        name: string;
-        arguments: string;
-      }
-    > = {};
+    // Start streaming in the background (don't await)
+    (async () => {
+      let pendingToolCalls: Record<string, { id: string; name: string; arguments: string }> = {};
 
-    for await (const chunk of stream) {
-      if (job.raw.abortController.signal.aborted) continue;
+      for await (const chunk of stream) {
+        // Ignore chunks if job was cancelled
+        if (job.raw.abortController.signal.aborted) continue;
 
-      const choice = chunk.choices[0];
-      if (!choice) throw new Error("No choice");
-      const delta = choice.delta;
+        // Extract the choice and delta (if any)
+        const choice = chunk.choices[0];
+        if (!choice) throw new Error("No choice");
+        const delta = choice.delta;
 
-      if (delta.content) {
-        job.raw.receiveChunk({ type: "content", content: delta.content });
-        continue;
-      }
-
-      // Handle tool calls tokens
-      if (delta.tool_calls) {
-        for (const toolCall of delta.tool_calls) {
-          // Retrieve the tool call ID
-          const id = toolCall.id ?? Object.keys(pendingToolCalls).at(-1);
-          if (!id) throw new Error("No tool call ID");
-
-          // Ensure the tool call is tracked
-          if (!pendingToolCalls[id]) pendingToolCalls[id] = { id, name: "", arguments: "" };
-
-          // Compound name tokens
-          if (toolCall.function?.name) pendingToolCalls[id].name += toolCall.function.name;
-
-          // Compound arguments tokens
-          if (toolCall.function?.arguments)
-            pendingToolCalls[id].arguments += toolCall.function.arguments;
+        // Handle content tokens
+        if (delta.content) {
+          job.raw.receiveChunk({ type: "content", content: delta.content });
+          continue;
         }
-      }
 
-      // Handle tool call completion
-      if (chunk.choices[0]?.finish_reason === "tool_calls") {
-        for (const toolCall of Object.values(pendingToolCalls)) {
-          job.raw.receiveChunk({
-            type: "tool",
-            toolId: toolCall.id,
-            toolInput: JSON.parse(toolCall.arguments || "{}"),
-          });
+        // Handle tool calls tokens
+        if (delta.tool_calls) {
+          for (const toolCall of delta.tool_calls) {
+            // Retrieve the tool call ID
+            const id = toolCall.id ?? Object.keys(pendingToolCalls).at(-1);
+            if (!id) throw new Error("No tool call ID");
+
+            // Ensure the tool call is tracked
+            if (!pendingToolCalls[id]) pendingToolCalls[id] = { id, name: "", arguments: "" };
+
+            // Compound name tokens
+            if (toolCall.function?.name) pendingToolCalls[id].name += toolCall.function.name;
+
+            // Compound arguments tokens
+            if (toolCall.function?.arguments)
+              pendingToolCalls[id].arguments += toolCall.function.arguments;
+          }
         }
-        pendingToolCalls = {};
-      }
-      // Handle end of generation
-      if (chunk.choices[0]?.finish_reason === "stop") job.raw.receiveChunk({ type: "end" });
-    }
 
+        // Handle tool call completion
+        if (chunk.choices[0]?.finish_reason === "tool_calls") {
+          for (const toolCall of Object.values(pendingToolCalls)) {
+            job.raw.receiveChunk({
+              type: "tool",
+              tool: {
+                id: toolCall.id,
+                name: toolCall.name,
+                input: JSON.parse(toolCall.arguments || "{}"),
+              },
+            });
+          }
+          pendingToolCalls = {};
+        }
+
+        // Handle end of stream
+        if (chunk.choices[0]?.finish_reason === "stop") job.raw.receiveChunk({ type: "end" });
+      }
+    })();
+
+    // Return the job immediately
     return job;
   }
 
   async generateObject(
     params: Parameters<typeof LLMBase.prototype.generateObject>[0],
   ): ReturnType<typeof LLMBase.prototype.generateObject> {
+    // Prepare messages in OpenAI format
     const openaiMessages = this.#toOpenAIMessages(params.messages);
 
     // Prepare JSON schema
     const { definitions } = zodToJsonSchema(params.schema, { name: "schema" });
     const schema = definitions?.schema;
 
+    // Generate the object
     const response = await this.#client.chat.completions.create({
       model: this.config.model,
       messages: openaiMessages,
@@ -194,8 +209,10 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfigSchema> {
       },
     });
 
+    // Parse the response
     const obj = JSON.parse(response.choices[0]?.message?.content || "{}");
 
+    // Return the object
     return { success: true, data: obj };
   }
 }

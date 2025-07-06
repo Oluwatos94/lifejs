@@ -3,67 +3,60 @@ import { type LLMProvider, llmProviders } from "@/models/llm";
 import { type STTProvider, sttProviders } from "@/models/stt";
 import { type TTSProvider, ttsProviders } from "@/models/tts";
 import { type VADProvider, vadProviders } from "@/models/vad";
+import type { PluginDefinition } from "@/plugins/definition";
+import { PluginRunner } from "@/plugins/runner";
 import { type ServerTransportProvider, serverTransportProviders } from "@/transport/index.server";
 import type { AgentDefinition } from "./definition";
 
 export class Agent {
+  definition: AgentDefinition<"output">;
   transport: InstanceType<ServerTransportProvider>;
   storage = null;
-  models = {} as {
+  models: {
     vad: InstanceType<VADProvider>;
     stt: InstanceType<STTProvider>;
     eou: InstanceType<EOUProvider>;
     llm: InstanceType<LLMProvider>;
     tts: InstanceType<TTSProvider>;
   };
-  plugins: Record<string, unknown> = {};
+  plugins: Record<string, PluginRunner<PluginDefinition>> = {};
 
-  constructor(definition: AgentDefinition) {
-    // Initialize VAD model
-    const vadProvider = vadProviders[definition.config.models.vad.provider];
-    this.models.vad = new vadProvider.class(definition.config.models.vad);
-
-    // Initialize STT model
-    const sttProvider = sttProviders[definition.config.models.stt.provider];
-    this.models.stt = new sttProvider.class(definition.config.models.stt);
-
-    // Initialize EOU model
-    const eouProvider = eouProviders[definition.config.models.eou.provider];
-    this.models.eou = new eouProvider.class(definition.config.models.eou);
-
-    // Initialize LLM model
-    const llmProvider = llmProviders[definition.config.models.llm.provider];
-    this.models.llm = new llmProvider.class(definition.config.models.llm as never);
-
-    // Initialize TTS model
-    const ttsProvider = ttsProviders[definition.config.models.tts.provider];
-    this.models.tts = new ttsProvider.class(definition.config.models.tts);
+  constructor(definition: AgentDefinition<"output">) {
+    this.definition = definition;
 
     // Initialize transport
     const serverTransportProvider = serverTransportProviders[definition.config.transport.provider];
     this.transport = new serverTransportProvider.class(definition.config.transport);
+    this.transport.joinRoom("room-1");
 
-    // // Register default plugins (if not disabled)
-    // if (!config.disableDefaultPlugins?.core) this.plugins.core = corePlugin;
-    // if (!config.disableDefaultPlugins?.actions) this.plugins.actions = actionsPlugin;
-    // if (!config.disableDefaultPlugins?.memories) this.plugins.memories = memoriesPlugin;
-    // if (!config.disableDefaultPlugins?.stores) this.plugins.stores = storesPlugin;
-    // if (!config.disableDefaultPlugins?.collections) this.plugins.collections = collectionsPlugin;
+    // Initialize storage
+    // TODO
 
-    // // Register extra plugins
-    // for (const plugin of config.plugins) this.plugins[plugin.id] = plugin;
+    // Initialize models
+    const vadProvider = vadProviders[definition.config.models.vad.provider];
+    const sttProvider = sttProviders[definition.config.models.stt.provider];
+    const eouProvider = eouProviders[definition.config.models.eou.provider];
+    const llmProvider = llmProviders[definition.config.models.llm.provider];
+    const ttsProvider = ttsProviders[definition.config.models.tts.provider];
+    this.models = {
+      vad: new vadProvider.class(definition.config.models.vad),
+      stt: new sttProvider.class(definition.config.models.stt),
+      eou: new eouProvider.class(definition.config.models.eou),
+      llm: new llmProvider.class(definition.config.models.llm as never),
+      tts: new ttsProvider.class(definition.config.models.tts),
+    };
 
-    // // Proxy some methods of the core plugin.
-    // if (this.plugins.core) {
-    //   this.newMessage = this.plugins.core.newMessage.bind(this.plugins.core);
-    //   this.abort = this.plugins.core.abort.bind(this.plugins.core);
-    //   this.continue = this.plugins.core.continue.bind(this.plugins.core);
-    //   this.say = this.plugins.core.say.bind(this.plugins.core);
-    //   this.ask = this.plugins.core.ask.bind(this.plugins.core);
-    //   this.prompt = this.plugins.core.prompt.bind(this.plugins.core);
-    //   this.inform = this.plugins.core.inform.bind(this.plugins.core);
-    //   this.alert = this.plugins.core.alert.bind(this.plugins.core);
-    // }
+    // Proxy some methods of the core plugin.
+    if (this.plugins.core) {
+      // this.newMessage = this.plugins.core.newMessage.bind(this.plugins.core);
+      // this.abort = this.plugins.core.abort.bind(this.plugins.core);
+      // this.continue = this.plugins.core.continue.bind(this.plugins.core);
+      // this.say = this.plugins.core.say.bind(this.plugins.core);
+      // this.ask = this.plugins.core.ask.bind(this.plugins.core);
+      // this.prompt = this.plugins.core.prompt.bind(this.plugins.core);
+      // this.inform = this.plugins.core.inform.bind(this.plugins.core);
+      // this.alert = this.plugins.core.alert.bind(this.plugins.core);
+    }
 
     // // Proxy other default plugins for easier access.
     // if (this.plugins.actions) this.actions = this.plugins.actions;
@@ -71,23 +64,45 @@ export class Agent {
     // if (this.plugins.stores) this.stores = this.plugins.stores;
     // if (this.plugins.collections) this.collections = this.plugins.collections;
   }
+
+  async start() {
+    for (const plugin of this.definition.plugins) {
+      const runner = new PluginRunner(
+        this,
+        plugin,
+        this.definition.pluginConfigs[plugin.name] ?? {},
+      );
+      this.plugins[plugin.name] = runner;
+      runner.start();
+    }
+  }
+
+  async stop() {
+    console.log("Stopping agent...");
+
+    // Stop all plugins
+    for (const [pluginId, plugin] of Object.entries(this.plugins)) {
+      try {
+        await plugin.stop();
+      } catch (error) {
+        console.error(`Error stopping plugin ${pluginId}:`, error);
+      }
+    }
+
+    // Disconnect transport
+    if (this.transport.isConnected) {
+      try {
+        await this.transport.leaveRoom();
+        console.log("Transport disconnected");
+      } catch (error) {
+        console.error("Error disconnecting transport:", error);
+      }
+    }
+
+    console.log("Agent stopped");
+  }
 }
 
-// const agentDef = defineAgent("test")
-//   .config({
-//     models: {
-//       eou: {
-//         provider: "turnsense",
-//       },
-//     },
-//   })
-//   ._getDefinition();
-
-// if (agentDef.config.models.eou.provider === "livekit") {
-//   agentDef.config.models.eou.maxMessages;
-// }
-
-// Syntactic sugar
 // notify: (
 //   { emit, context },
 //   params: {
@@ -105,7 +120,6 @@ export class Agent {
 //       role: params.source === "user" ? "user" : "system",
 //       message,
 //     },
-//     urgent: true,
 //   });
 
 //   // If the behavior is "discrete", return
@@ -119,14 +133,12 @@ export class Agent {
 //         insertPolicy: "abrupt-interrupt",
 //         allowInterruption: true,
 //       },
-//       urgent: true,
 //     });
 //   // Else, if the behavior is decide, decide whether to make the notification interrupt or not
 //   else if (params.behavior === "decide") {
 //     emit({
 //       type: "operation.decide",
 //       data: { messages: [], insertPolicy: "abrupt-interrupt", allowInterruption: true },
-//       urgent: true,
 //     });
 //   }
 // },
@@ -134,15 +146,13 @@ export class Agent {
 //   emit({
 //     type: "operation.message",
 //     data: { id: generateId(), role: "user", message: message },
-//     urgent: true,
 //   });
-//   emit({ type: "operation.continue", urgent: true, data: { messages: context.messages } });
+//   emit({ type: "operation.continue", data: { messages: context.messages } });
 // },
 // prompt: ({ emit, context }, message: string) => {
 //   emit({
 //     type: "operation.message",
 //     data: { id: generateId(), role: "system", message: message },
-//     urgent: true,
 //   });
-//   emit({ type: "operation.continue", urgent: true, data: { messages: context.messages } });
+//   emit({ type: "operation.continue", data: { messages: context.messages } });
 // },
