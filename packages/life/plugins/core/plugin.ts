@@ -248,7 +248,14 @@ export const corePlugin = definePlugin("core")
     context.messages = history.getMessages();
 
     if (!stableDeepEqual(context.messages, _initialMessages)) {
-      console.log("💬", context.messages);
+      console.log(
+        "💬",
+        context.messages.map((m) => {
+          if (m.role === "user" || m.role === "agent") return `${m.role}: ${m.content}`;
+          const { createdAt, lastUpdated, role, id, ...rest } = klona(m);
+          return `${m.role}: ${JSON.stringify(rest)}`;
+        }),
+      );
     }
   })
   // 3. Listen for incoming audio chunks coming from the WebRTC room

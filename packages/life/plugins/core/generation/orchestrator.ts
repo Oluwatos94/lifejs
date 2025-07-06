@@ -53,7 +53,7 @@ export class GenerationOrchestrator {
         data: {
           reason: event.data.reason,
           forced: event.data.force ?? false,
-          author: "application",
+          author: event.data.author,
         },
       });
     }
