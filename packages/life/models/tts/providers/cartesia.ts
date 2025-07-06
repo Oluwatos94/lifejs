@@ -7,6 +7,27 @@ import { TTSBase, type TTSGenerateJob } from "../base";
 // Config
 export const cartesiaTTSConfigSchema = z.object({
   apiKey: z.string().default(process.env.CARTESIA_API_KEY ?? ""),
+  model: z.enum(["sonic-2", "sonic-turbo", "sonic"]).default("sonic-2"),
+  language: z
+    .enum([
+      "en",
+      "fr",
+      "de",
+      "es",
+      "pt",
+      "zh",
+      "ja",
+      "hi",
+      "it",
+      "ko",
+      "nl",
+      "pl",
+      "ru",
+      "sv",
+      "tr",
+    ])
+    .default("en"),
+  voiceId: z.string().default("e8e5fffb-252c-436d-b842-8879b84445b6"),
 });
 
 // Model
@@ -50,8 +71,8 @@ export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfigSchema> {
     const response = this.#socket.send({
       contextId: job.id,
       modelId: "sonic-2",
-      language: "en",
-      voice: { mode: "id", id: "e8e5fffb-252c-436d-b842-8879b84445b6" },
+      language: this.config.language,
+      voice: { mode: "id", id: this.config.voiceId },
       transcript: text,
       outputFormat: {
         container: "raw",
