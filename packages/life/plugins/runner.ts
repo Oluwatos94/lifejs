@@ -123,12 +123,12 @@ export class PluginRunner<const Definition extends PluginDefinition> {
 
   async start() {
     for await (const event of this.#queue) {
-      // if (
-      //   event.type !== "user.audio-chunk" &&
-      //   event.type !== "user.voice-chunk" &&
-      //   event.type !== "agent.voice-chunk"
-      // )
-      //   console.log("🐳", event);
+      if (
+        event.type !== "user.audio-chunk" &&
+        event.type !== "user.voice-chunk" &&
+        event.type !== "agent.voice-chunk"
+      )
+        console.log("🐳", event);
       // 1. Run effects
       for (const effect of Object.values(this.#definition.effects ?? {})) {
         await effect({

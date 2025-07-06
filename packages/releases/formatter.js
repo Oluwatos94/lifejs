@@ -50,7 +50,7 @@ async function mergedPRCount(login) {
         q: `repo:${repoOrg}/${repoName} is:pr is:merged author:${login}`,
         per_page: 1,
     });
-    return data.total_count; // 0, 1, 2, …
+    return data.total_count;
 }
 const changelogFunctions = {
     getDependencyReleaseLine: async () => "",
@@ -75,7 +75,7 @@ const changelogFunctions = {
         // Retrieve the authors of the source
         const authors = await getAuthors(source);
         // Retrieve whether the author is a new contributor
-        const isNewContributor = Object.fromEntries(await Promise.all(authors.map(async (a) => [a, (await mergedPRCount(a)) <= 1])));
+        const isNewContributor = Object.fromEntries(await Promise.all(authors.map(async (a) => [a, a === "LilaRest" ? false : (await mergedPRCount(a)) <= 1])));
         // Generate and return release line
         const authorsWithLinks = authors.map((author) => `[@${author}](https://github.com/${author})${isNewContributor[author] ? " **(New contributor! 🎉)**" : ""}`);
         const sourceWithLinks = source.type === "commit"
