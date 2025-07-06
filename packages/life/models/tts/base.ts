@@ -34,7 +34,7 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
   config: z.infer<ConfigSchema>;
 
   /** ms per token */
-  #pace = new WeightedAverage();
+  #pace = new WeightedAverage(200); // 200ms per token is a good default
   #jobsFullText: Record<string, string> = {};
   #jobsFullAudio: Record<string, Int16Array> = {};
   #jobsTakenText: Record<string, string> = {};
@@ -44,11 +44,8 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
 
     // Start a minimal generation on instantion, so pace is set
     this.generate().then(async (job) => {
-      job.pushText("Isn't Life beautiful? Are you talking about the Typescript framework?");
-      for await (const chunk of job.getStream()) {
-        if (chunk.type === "end") break;
-      }
-      console.log("TTS INIT DONE.");
+      job.pushText("Isn't Life beautiful? I'm talking about the Typescript framework.");
+      for await (const chunk of job.getStream()) if (chunk.type === "end") break;
     });
   }
 
