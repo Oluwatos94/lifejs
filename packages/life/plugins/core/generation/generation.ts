@@ -11,13 +11,10 @@ export type GenerationChunk =
   | { type: "tool-requests"; requests: ToolRequests }
   | { type: "end" };
 
-type GenerationModes = Array<"voice" | "text">;
-
 export class Generation {
   id = newId("generation");
   queue: AsyncQueue<GenerationChunk> = new AsyncQueue();
   status: "idle" | "running" | "ended" = "idle";
-  modes: Array<"voice" | "text"> = ["voice", "text"];
 
   prefix = "";
   needContinue = false;
@@ -88,7 +85,7 @@ export class Generation {
         if (this.#toolRequests) {
           this.queue.push({ type: "tool-requests", requests: this.#toolRequests });
         }
-        this.stop();
+        this.queue.push({ type: "end" });
         break;
       } else if (chunk.type === "error") console.error("TTS error", chunk);
       this.hasOutputted = true;
@@ -103,7 +100,11 @@ export class Generation {
     }
 
     // If doesn't need to continue, end thinking
-    if (!this.needContinue) return this.stop();
+    if (!this.needContinue) {
+      if (this.#voiceEnabled) this.#ttsJob?.pushText("", true);
+      else this.queue.push({ type: "end" });
+      return;
+    }
 
     // Errors if continue is requested but no resources are provided
     if (!resources) throw new Error("Resources are required to continue thinking.");
@@ -127,12 +128,14 @@ export class Generation {
           else {
             this.hasOutputted = true;
             this.queue.push({ type: "tool-requests", requests: chunk.tools });
-            this.stop();
             break;
           }
         }
         // - End
-        else if (chunk.type === "end") this.#ttsJob?.pushText("", true);
+        else if (chunk.type === "end") {
+          this.#ttsJob?.pushText("", true);
+          break;
+        }
       }
       // Else, push chunks directly to the queue
       else {
@@ -142,12 +145,12 @@ export class Generation {
         // - Tools
         else if (chunk.type === "tools") {
           this.queue.push({ type: "tool-requests", requests: chunk.tools });
-          this.stop();
+          this.queue.push({ type: "end" });
           break;
         }
         // - End
         else if (chunk.type === "end") {
-          this.stop();
+          this.queue.push({ type: "end" });
           break;
         }
         this.hasOutputted = true;
@@ -155,7 +158,8 @@ export class Generation {
     }
   }
 
-  stop(abrupt = false) {
+  // Called by the orchestrator when end chunks are consumed, or when the generation is interrupted
+  stop() {
     // Cancel any ongoing LLM job
     if (this.#llmJob) this.#llmJob.cancel();
 
@@ -163,8 +167,6 @@ export class Generation {
     if (this.#ttsJob) this.#ttsJob.cancel();
 
     // Push an end chunk and update status
-    if (abrupt) this.queue.pushFirst({ type: "end" });
-    else this.queue.push({ type: "end" });
     this.status = "ended";
   }
 }

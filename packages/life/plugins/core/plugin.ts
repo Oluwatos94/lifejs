@@ -182,16 +182,12 @@ export const corePlugin = definePlugin("core")
   })
   // 1. Handle agent' status changes
   .addEffect("handle-status", ({ event, context }) => {
-    const statusBefore = klona(context.status);
     if (event.type === "agent.generation-end")
       context.status = { listening: true, thinking: false, speaking: false };
     else if (event.type === "agent.voice-start") {
       context.status = { ...context.status, listening: false, speaking: true };
     } else if (event.type === "agent.generation-start") {
       context.status = { ...context.status, listening: false, thinking: true };
-    }
-    if (!stableDeepEqual(statusBefore, context.status)) {
-      console.log("🔄 Status changed", context.status);
     }
   })
   // 2. Maintain messages history
@@ -294,7 +290,19 @@ export const corePlugin = definePlugin("core")
     let postPaddingCount = POST_PADDING_CHUNKS;
     // Keeps track of 3x the min. interruption duration in audio chunks
     const interruptBuffer = new RollingBuffer<Int16Array>((INTERRUPT_MIN_DURATION_MS / 10) * 3);
-    let interruptDuration = 0;
+
+    // Sliding window for voice chunks to handle VAD imperfections
+    let voiceChunksWindow: Array<{ timestamp: number; duration: number }> = [];
+    const VOICE_WINDOW_MS = INTERRUPT_MIN_DURATION_MS * 2;
+
+    // Helper to calculate current interrupt duration from sliding window
+    const getCurrentInterruptDuration = () => {
+      const now = Date.now();
+      // Remove chunks older than the window
+      voiceChunksWindow = voiceChunksWindow.filter((c) => now - c.timestamp <= VOICE_WINDOW_MS);
+      // Sum up durations of remaining chunks
+      return voiceChunksWindow.reduce((sum, chunk) => sum + chunk.duration, 0);
+    };
 
     // Listen to user audio chunks
     for await (const { event, context } of queue) {
@@ -366,21 +374,23 @@ export const corePlugin = definePlugin("core")
         // Buffer the audio chunk
         interruptBuffer.add(event.data.audioChunk);
 
-        // If voice is detected, increment the interrupt duration
+        // If voice is detected, add to sliding window
         if (inSpeech) {
           const duration = audioChunkToMs(event.data.audioChunk);
-          interruptDuration += duration;
+          voiceChunksWindow.push({
+            timestamp: Date.now(),
+            duration: duration,
+          });
+
+          // Check current interrupt duration (works even during silent chunks)
+          const currentInterruptDuration = getCurrentInterruptDuration();
           console.log(
-            `🔴 Interrupt duration: ${interruptDuration}ms / ${INTERRUPT_MIN_DURATION_MS}ms ${interruptDuration >= INTERRUPT_MIN_DURATION_MS}`,
+            `🔴 Interrupt duration: ${currentInterruptDuration}ms / ${INTERRUPT_MIN_DURATION_MS}ms ${currentInterruptDuration >= INTERRUPT_MIN_DURATION_MS}`,
           );
-          setTimeout(() => {
-            if (interruptDuration - duration < 0) interruptDuration = 0;
-            else interruptDuration -= duration;
-          }, INTERRUPT_MIN_DURATION_MS);
         }
 
-        // If the interruption buffer is long enough, abort and emit all accumulated voice chunks
-        if (interruptDuration >= INTERRUPT_MIN_DURATION_MS) {
+        // If the interruption duration is long enough, abort and emit all accumulated voice chunks
+        if (getCurrentInterruptDuration() >= INTERRUPT_MIN_DURATION_MS) {
           console.log("🟥 Interrupting");
           methods.interrupt({ reason: "The user is speaking", author: "user" });
           emit({ type: "user.voice-start" });
@@ -388,7 +398,7 @@ export const corePlugin = definePlugin("core")
             emitVoiceChunk({ voiceChunk, type: "voice" });
           }
           interruptBuffer.empty();
-          interruptDuration = 0;
+          voiceChunksWindow.length = 0; // Clear the sliding window
         }
       }
     }

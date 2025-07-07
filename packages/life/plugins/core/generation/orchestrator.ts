@@ -46,7 +46,7 @@ export class GenerationOrchestrator {
         `🟢 Try interrupting gen ${generation.id} (status: ${generation.status}, canInterrupt: ${generation.canInterrupt()}, force: ${event.data.force})`,
       );
       if (generation.status === "running" && (generation.canInterrupt() || event.data.force)) {
-        generation.stop(true);
+        generation.queue.pushFirst({ type: "end" });
         this.#generations = this.#generations.filter((g) => g !== generation);
         if (generation.hasOutputted) interrupted = true;
       }
@@ -279,6 +279,7 @@ export class GenerationOrchestrator {
 
         // Or if this is the end of the generation, try scheduling the next generation
         else if (chunk.type === "end") {
+          generation.stop();
           if (agentIsSpeaking) {
             this.#emit({ type: "agent.voice-end" });
             agentIsSpeaking = false;
