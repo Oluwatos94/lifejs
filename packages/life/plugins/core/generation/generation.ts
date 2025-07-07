@@ -158,7 +158,7 @@ export class Generation {
     }
   }
 
-  // Called by the orchestrator when end chunks are consumed, or when the generation is interrupted
+  // Called by the orchestrator when end chunks are consumed
   stop() {
     // Cancel any ongoing LLM job
     if (this.#llmJob) this.#llmJob.cancel();

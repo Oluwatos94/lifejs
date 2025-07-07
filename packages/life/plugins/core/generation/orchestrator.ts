@@ -138,7 +138,7 @@ export class GenerationOrchestrator {
     // In case an abrupt intrerupt insert is requested, try first interrupting the current generation
     if (event.data.interrupt === "abrupt")
       this.#processInterruptEvent({
-        id: "whatever",
+        id: newId("event"),
         type: "agent.interrupt",
         data: {
           reason: "Interrupted by another operation.",
@@ -150,7 +150,7 @@ export class GenerationOrchestrator {
     for (const decide of this.#decidePromises) {
       decide.cancel();
       generation.addInsertEvent({
-        id: "whatever",
+        id: newId("event"),
         type: "agent.continue",
         data: decide.event.data,
       });
@@ -243,9 +243,9 @@ export class GenerationOrchestrator {
   }
 
   async #consumeGenerations() {
-    // Add a throttle to send max. 200ms of upfront chunks to the user
+    // Add a throttle to send max. 150ms of upfront chunks to the user
     // This allows keeping interruptions management on the server.
-    const limiter = throttledGenerationQueue(200);
+    const limiter = throttledGenerationQueue(this.#voiceEnabled ? 150 : 0);
     let agentIsSpeaking = false;
 
     for await (const generation of this.#consumeQueue) {
