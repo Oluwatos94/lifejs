@@ -133,7 +133,6 @@ export const corePlugin = definePlugin("core")
         force: z.boolean().optional(),
       }),
     },
-    "agent.text-chunk": { dataSchema: z.object({ textChunk: z.string() }) },
     "agent.tool-requests": { dataSchema: toolRequestsSchema },
     "agent.tool-response": {
       dataSchema: z.object({
@@ -152,11 +151,12 @@ export const corePlugin = definePlugin("core")
         author: z.enum(["user", "application"]),
       }),
     },
-    "agent.voice-start": {},
+    "agent.text-chunk": { dataSchema: z.object({ textChunk: z.string() }) },
     "agent.voice-chunk": { dataSchema: z.object({ voiceChunk: z.instanceof(Int16Array) }) },
-    "agent.voice-end": {},
-    "agent.generation-start": {},
-    "agent.generation-end": {},
+    "agent.speaking-start": {}, // start of output stream
+    "agent.speaking-end": {}, // end of output stream
+    "agent.thinking-start": {}, // start of generation
+    "agent.thinking-end": {}, // end of generation
   })
   .methods({
     createMessage: ({ emit }, message: CreateMessageInput) =>
@@ -182,12 +182,20 @@ export const corePlugin = definePlugin("core")
   })
   // 1. Handle agent' status changes
   .addEffect("handle-status", ({ event, context }) => {
-    if (event.type === "agent.generation-end")
+    const statusBefore = klona(context.status);
+    if (event.type === "agent.thinking-start") {
+      context.status.listening = false;
+      context.status.thinking = true;
+    } else if (event.type === "agent.thinking-end") {
+      context.status.thinking = false;
+    } else if (event.type === "agent.speaking-end")
       context.status = { listening: true, thinking: false, speaking: false };
-    else if (event.type === "agent.voice-start") {
-      context.status = { ...context.status, listening: false, speaking: true };
-    } else if (event.type === "agent.generation-start") {
-      context.status = { ...context.status, listening: false, thinking: true };
+    else if (event.type === "agent.speaking-start") {
+      context.status.listening = false;
+      context.status.speaking = true;
+    }
+    if (!stableDeepEqual(statusBefore, context.status)) {
+      console.log("💬", context.status);
     }
   })
   // 2. Maintain messages history
@@ -381,17 +389,10 @@ export const corePlugin = definePlugin("core")
             timestamp: Date.now(),
             duration: duration,
           });
-
-          // Check current interrupt duration (works even during silent chunks)
-          const currentInterruptDuration = getCurrentInterruptDuration();
-          console.log(
-            `🔴 Interrupt duration: ${currentInterruptDuration}ms / ${INTERRUPT_MIN_DURATION_MS}ms ${currentInterruptDuration >= INTERRUPT_MIN_DURATION_MS}`,
-          );
         }
 
         // If the interruption duration is long enough, abort and emit all accumulated voice chunks
         if (getCurrentInterruptDuration() >= INTERRUPT_MIN_DURATION_MS) {
-          console.log("🟥 Interrupting");
           methods.interrupt({ reason: "The user is speaking", author: "user" });
           emit({ type: "user.voice-start" });
           for (const voiceChunk of interruptBuffer.get()) {
