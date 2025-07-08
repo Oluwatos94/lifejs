@@ -49,6 +49,8 @@ export class PluginRunner<const Definition extends PluginDefinition> {
       this.#finalMethods[methodName] = method;
     }
 
+    Object.assign(this, this.#finalMethods);
+
     for (const service of Object.values(this.#definition.services ?? {}) ?? []) {
       const queue = new AsyncQueue<{
         event: PluginEvent<PluginEventsDef, "output">;

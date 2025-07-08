@@ -19,4 +19,8 @@ export class AgentClient {
     await this.transport.enableMicrophone();
     await this.transport.playAudio();
   }
+
+  async say(text: string) {
+    await this.transport.sendObject("rpc-say", { text });
+  }
 }

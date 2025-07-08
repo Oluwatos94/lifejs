@@ -488,8 +488,9 @@ export const corePlugin = definePlugin("core")
     });
 
     // Forward events to the orchestrator
-    for await (const { event, context } of queue)
+    for await (const { event, context } of queue) {
       orchestrator.scheduleGenerations(event, context.voiceEnabled);
+    }
   })
   // 8. Handle resources requests
   .addEffect("handle-resources", ({ event, emit, context, config }) => {

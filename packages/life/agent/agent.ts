@@ -27,7 +27,12 @@ export class Agent {
     // Initialize transport
     const serverTransportProvider = serverTransportProviders[definition.config.transport.provider];
     this.transport = new serverTransportProvider.class(definition.config.transport);
-    this.transport.joinRoom("room-1");
+    this.transport.joinRoom("room-1").then(() => {
+      this.transport.receiveObject("rpc-say", (data) => {
+        // @ts-ignore
+        this.plugins.core.say(data);
+      });
+    });
 
     // Initialize storage
     // TODO
@@ -47,16 +52,9 @@ export class Agent {
     };
 
     // Proxy some methods of the core plugin.
-    if (this.plugins.core) {
-      // this.newMessage = this.plugins.core.newMessage.bind(this.plugins.core);
-      // this.abort = this.plugins.core.abort.bind(this.plugins.core);
-      // this.continue = this.plugins.core.continue.bind(this.plugins.core);
-      // this.say = this.plugins.core.say.bind(this.plugins.core);
-      // this.ask = this.plugins.core.ask.bind(this.plugins.core);
-      // this.prompt = this.plugins.core.prompt.bind(this.plugins.core);
-      // this.inform = this.plugins.core.inform.bind(this.plugins.core);
-      // this.alert = this.plugins.core.alert.bind(this.plugins.core);
-    }
+    // if (this.plugins.core) {
+
+    // }
 
     // // Proxy other default plugins for easier access.
     // if (this.plugins.actions) this.actions = this.plugins.actions;
