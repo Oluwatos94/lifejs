@@ -1,33 +1,51 @@
 import type { Message, ToolDefinition } from "@/agent/resources";
 import { Mistral } from "@mistralai/mistralai";
-import type { AssistantMessage, SystemMessage, ToolMessage, UserMessage } from "@mistralai/mistralai/models/components";
+import type {
+  AssistantMessage,
+  SystemMessage,
+  ToolMessage,
+  UserMessage,
+} from "@mistralai/mistralai/models/components";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { LLMBase, type LLMGenerateMessageJob } from "../base";
 
+// Define Mistral-specific message types with required role properties
+type MistralUserMessage = UserMessage & { role: "user" };
+type MistralAssistantMessage = AssistantMessage & { role: "assistant" };
+type MistralSystemMessage = SystemMessage & { role: "system" };
+type MistralToolMessage = ToolMessage & { role: "tool" };
+type MistralMessage =
+  | MistralUserMessage
+  | MistralAssistantMessage
+  | MistralSystemMessage
+  | MistralToolMessage;
+
 // Config
 export const mistralLLMConfigSchema = z.object({
   apiKey: z.string().default(process.env.MISTRAL_API_KEY ?? ""),
-  model: z.enum([
-    "mistral-large-latest",
-    "mistral-large-2411",
-    "mistral-large-2407",
-    "mistral-small-latest",
-    "mistral-small-2501",
-    "mistral-small-2503",
-    "mistral-medium-latest",
-    "mistral-medium-2505",
-    "pixtral-large-latest",
-    "pixtral-large-2411",
-    "codestral-latest",
-    "codestral-2501",
-    "codestral-2405",
-    "ministral-3b-latest",
-    "ministral-8b-latest",
-    "open-mistral-7b",
-    "open-mixtral-8x7b",
-    "open-mixtral-8x22b",
-  ]).default("mistral-small-latest"),
+  model: z
+    .enum([
+      "mistral-large-latest",
+      "mistral-large-2411",
+      "mistral-large-2407",
+      "mistral-small-latest",
+      "mistral-small-2501",
+      "mistral-small-2503",
+      "mistral-medium-latest",
+      "mistral-medium-2505",
+      "pixtral-large-latest",
+      "pixtral-large-2411",
+      "codestral-latest",
+      "codestral-2501",
+      "codestral-2405",
+      "ministral-3b-latest",
+      "ministral-8b-latest",
+      "open-mistral-7b",
+      "open-mixtral-8x7b",
+      "open-mixtral-8x22b",
+    ])
+    .default("mistral-small-latest"),
   temperature: z.number().min(0).max(1).default(0.5),
 });
 
@@ -48,42 +66,44 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
    * Format conversion
    */
 
-  #toMistralMessage(message: Message): UserMessage | AssistantMessage | SystemMessage | ToolMessage {
-    if (message.role === "user") {
-      return { role: "user" as const, content: message.content };
-    }
-
-    if (message.role === "agent") {
+  #toMistralMessage(message: Message): MistralMessage {
+    if (message.role === "user")
       return {
-        role: "assistant" as const,
+        role: "user",
+        content: message.content,
+      };
+
+    if (message.role === "agent")
+      return {
+        role: "assistant",
         content: message.content,
         toolCalls: message.toolsRequests?.map((request) => ({
           id: request.id,
-          function: { 
-            name: request.name, 
-            arguments: JSON.stringify(request.input) 
+          function: {
+            name: request.name,
+            arguments: JSON.stringify(request.input),
           },
           type: "function" as const,
         })),
       };
-    }
 
-    if (message.role === "system") {
-      return { role: "system" as const, content: message.content };
-    }
-
-    if (message.role === "tool-response") {
+    if (message.role === "system")
       return {
-        role: "tool" as const,
+        role: "system",
+        content: message.content,
+      };
+
+    if (message.role === "tool-response")
+      return {
+        role: "tool",
         name: message.toolId,
         content: JSON.stringify(message.toolOutput),
       };
-    }
 
     return null as never;
   }
 
-  #toMistralMessages(messages: Message[]): Array<UserMessage | AssistantMessage | SystemMessage | ToolMessage> {
+  #toMistralMessages(messages: Message[]): MistralMessage[] {
     return messages.map(this.#toMistralMessage.bind(this));
   }
 
@@ -120,7 +140,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
       const stream = await this.#client.chat.stream({
         model: this.config.model,
         temperature: this.config.temperature,
-        messages: mistralMessages as any,
+        messages: mistralMessages,
         ...(mistralTools?.length ? { tools: mistralTools } : {}),
       });
 
@@ -143,10 +163,10 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
             // Handle content tokens
             if (chunk.data.choices[0]?.delta?.content) {
               const content = chunk.data.choices[0].delta.content;
-              const contentString = typeof content === 'string' ? content : JSON.stringify(content);
-              job.raw.receiveChunk({ 
-                type: "content", 
-                content: contentString 
+              const contentString = typeof content === "string" ? content : JSON.stringify(content);
+              job.raw.receiveChunk({
+                type: "content",
+                content: contentString,
               });
               continue;
             }
@@ -178,16 +198,17 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
 
             // Handle finish reasons
             const finishReason = chunk.data.choices[0]?.finishReason;
-            
+
             // Handle tool call completion
             if (finishReason === "tool_calls") {
-              for (const toolCall of Object.values(pendingToolCalls)) {
-                job.raw.receiveChunk({
-                  type: "tool",
-                  toolId: toolCall.name || toolCall.id,
-                  toolInput: JSON.parse(toolCall.arguments || "{}"),
-                });
-              }
+              job.raw.receiveChunk({
+                type: "tools",
+                tools: Object.values(pendingToolCalls).map((toolCall) => ({
+                  id: toolCall.id,
+                  name: toolCall.name,
+                  input: JSON.parse(toolCall.arguments || "{}"),
+                })),
+              });
               pendingToolCalls = {};
             }
 
@@ -197,9 +218,9 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
             }
           }
         } catch (error) {
-          job.raw.receiveChunk({ 
-            type: "error", 
-            error: error instanceof Error ? error.message : "Unknown error" 
+          job.raw.receiveChunk({
+            type: "error",
+            error: error instanceof Error ? error.message : "Unknown error",
           });
         }
       })();
@@ -207,9 +228,9 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
       // Return the job
       return job;
     } catch (error) {
-      job.raw.receiveChunk({ 
-        type: "error", 
-        error: error instanceof Error ? error.message : "Failed to create stream" 
+      job.raw.receiveChunk({
+        type: "error",
+        error: error instanceof Error ? error.message : "Failed to create stream",
       });
       return job;
     }
@@ -226,7 +247,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
       // This uses Mistral's built-in schema validation with the Zod schema
       const response = await this.#client.chat.parse({
         model: this.config.model,
-        messages: mistralMessages as any,
+        messages: mistralMessages,
         temperature: this.config.temperature,
         responseFormat: params.schema,
       });
@@ -240,9 +261,9 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
       // Return the validated object (no additional validation needed)
       return { success: true, data: parsed };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : "Failed to generate object" 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to generate object",
       };
     }
   }
