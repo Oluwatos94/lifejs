@@ -4,6 +4,9 @@ config();
 const repoOrg = "lifejs";
 const repoName = "lifejs";
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+function capitalizeFirst(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
 async function findPRFromCommit(hash) {
     const { data } = await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
         owner: repoOrg,
@@ -47,7 +50,7 @@ async function mergedPRCount(login) {
         q: `repo:${repoOrg}/${repoName} is:pr is:merged author:${login}`,
         per_page: 1,
     });
-    return data.total_count; // 0, 1, 2, …
+    return data.total_count;
 }
 const changelogFunctions = {
     getDependencyReleaseLine: async () => "",
@@ -72,13 +75,13 @@ const changelogFunctions = {
         // Retrieve the authors of the source
         const authors = await getAuthors(source);
         // Retrieve whether the author is a new contributor
-        const isNewContributor = Object.fromEntries(await Promise.all(authors.map(async (a) => [a, (await mergedPRCount(a)) <= 1])));
+        const isNewContributor = Object.fromEntries(await Promise.all(authors.map(async (a) => [a, a === "LilaRest" ? false : (await mergedPRCount(a)) <= 1])));
         // Generate and return release line
         const authorsWithLinks = authors.map((author) => `[@${author}](https://github.com/${author})${isNewContributor[author] ? " **(New contributor! 🎉)**" : ""}`);
         const sourceWithLinks = source.type === "commit"
             ? `[${source.hash.slice(0, 7)}](https://github.com/${repoOrg}/${repoName}/commit/${source.hash})`
             : `[#${source.id}](https://github.com/${repoOrg}/${repoName}/pull/${source.id})`;
-        return `- ${authorsWithLinks.join(", ")} in ${sourceWithLinks} — ${changeset.summary.trim()}`;
+        return `- ${authorsWithLinks.join(", ")} in ${sourceWithLinks} — ${capitalizeFirst(changeset.summary.trim())}`;
     },
 };
 export default changelogFunctions;

@@ -1,32 +1,23 @@
 import { ensureServer } from "@/shared/ensure-server";
 ensureServer("transport.index.server");
-
 import { z } from "zod";
-import { livekitConnectorConfigSchema } from "./providers/livekit/config";
-import { LiveKitServerTransport } from "./providers/livekit/server";
+import { LiveKitServerTransport, livekitServerConfigSchema } from "./providers/livekit/server";
 
 // Providers
 export const serverTransportProviders = {
-  livekit: { class: LiveKitServerTransport, configSchema: livekitConnectorConfigSchema },
+  livekit: { class: LiveKitServerTransport, configSchema: livekitServerConfigSchema },
 } as const;
 
 export type ServerTransportProvider =
   (typeof serverTransportProviders)[keyof typeof serverTransportProviders]["class"];
 
-// Auth
-export { getToken } from "./auth";
-
 // Config
-export type ServerTransportProviderConfigInput = {
-  [K in keyof typeof serverTransportProviders]: { provider: K } & z.input<
-    (typeof serverTransportProviders)[K]["configSchema"]
-  >;
-};
-export type ServerTransportProviderConfig = {
-  [K in keyof typeof serverTransportProviders]: { provider: K } & z.output<
-    (typeof serverTransportProviders)[K]["configSchema"]
-  >;
+export type ServerTransportProviderConfig<T extends "input" | "output"> = {
+  [K in keyof typeof serverTransportProviders]: { provider: K } & (T extends "input"
+    ? z.input<(typeof serverTransportProviders)[K]["configSchema"]>
+    : z.output<(typeof serverTransportProviders)[K]["configSchema"]>);
 }[keyof typeof serverTransportProviders];
+
 export const serverTransportProviderConfigSchema = z.discriminatedUnion(
   "provider",
   Object.entries(serverTransportProviders).map(([key, { configSchema }]) =>
@@ -36,3 +27,6 @@ export const serverTransportProviderConfigSchema = z.discriminatedUnion(
     ...z.ZodObject<{ provider: z.ZodString }>[],
   ],
 );
+
+// Auth
+export { getToken } from "./auth";

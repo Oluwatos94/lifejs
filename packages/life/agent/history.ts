@@ -1,3 +1,5 @@
+import { klona } from "@/shared/klona";
+import { newId } from "@/shared/prefixed-id";
 import {
   type CreateMessageInput,
   type Message,
@@ -18,7 +20,7 @@ export class History {
   }
 
   generateId() {
-    return crypto.randomUUID();
+    return newId("message");
   }
 
   getMessage(id: string) {
@@ -29,8 +31,12 @@ export class History {
     return this.#messages;
   }
 
-  findLastMessageIdOfRole(role: Message["role"]) {
-    return [...this.#messages].reverse().find((message) => message.role === role)?.id;
+  findLastMessageOfRole(role: Message["role"] | Message["role"][]) {
+    return klona(this.#messages)
+      .reverse()
+      .find((message) =>
+        typeof role === "string" ? message.role === role : role.includes(message.role),
+      );
   }
 
   createMessage(message: CreateMessageInput) {
@@ -72,13 +78,13 @@ export class History {
     this.#messages = this.#messages.map((m) => (m.id === message.id ? updatedMessage : m));
   }
 
-  addToolRequestToAgentMessage(messageId: string, request: ToolRequest) {
+  addToolRequestsToAgentMessage(messageId: string, requests: ToolRequest[]) {
     const message = this.getMessage(messageId);
     if (!message) throw new Error(`Message with id ${messageId} does not exist.`);
     if (message.role !== "agent")
       throw new Error(`Message with id ${messageId} is not an agent message.`);
     if (!message.toolsRequests) message.toolsRequests = [];
-    message.toolsRequests.push(request);
+    message.toolsRequests.push(...requests);
     message.lastUpdated = Date.now();
   }
 
@@ -87,7 +93,7 @@ export class History {
     if (!existingMessage) throw new Error(`Message with id ${messageId} does not exist.`);
     if (existingMessage.role !== "user")
       throw new Error(`Message with id ${messageId} is not a user message.`);
-    existingMessage.content += content;
+    existingMessage.content += `${existingMessage.content ? " " : ""}${content}`;
     existingMessage.lastUpdated = Date.now();
     return existingMessage.id;
   }

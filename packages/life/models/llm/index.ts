@@ -13,16 +13,12 @@ export const llmProviders = {
 export type LLMProvider = (typeof llmProviders)[keyof typeof llmProviders]["class"];
 
 // Config
-export type LLMProviderConfigInput = {
-  [K in keyof typeof llmProviders]: { provider: K } & z.input<
-    (typeof llmProviders)[K]["configSchema"]
-  >;
-};
-export type LLMProviderConfig = {
-  [K in keyof typeof llmProviders]: { provider: K } & z.output<
-    (typeof llmProviders)[K]["configSchema"]
-  >;
+export type LLMProviderConfig<T extends "input" | "output"> = {
+  [K in keyof typeof llmProviders]: { provider: K } & (T extends "input"
+    ? z.input<(typeof llmProviders)[K]["configSchema"]>
+    : z.output<(typeof llmProviders)[K]["configSchema"]>);
 }[keyof typeof llmProviders];
+
 export const llmProviderConfigSchema = z.discriminatedUnion(
   "provider",
   Object.entries(llmProviders).map(([key, { configSchema }]) =>

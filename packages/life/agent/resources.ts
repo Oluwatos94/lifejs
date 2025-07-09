@@ -28,10 +28,13 @@ export type SystemMessage = z.infer<typeof systemMessageSchema>;
 // Tool request
 export const toolRequestSchema = z.object({
   id: z.string(),
+  name: z.string(),
   input: z.record(z.any()),
 });
+export const toolRequestsSchema = z.array(toolRequestSchema);
 
 export type ToolRequest = z.infer<typeof toolRequestSchema>;
+export type ToolRequests = z.infer<typeof toolRequestsSchema>;
 
 // Agent message
 export const agentMessageSchema = z.object({
@@ -44,24 +47,23 @@ export const agentMessageSchema = z.object({
 export type AgentMessage = z.infer<typeof agentMessageSchema>;
 
 // Tool response message
-export const toolResponseMessage = z.object({
+export const toolResponseMessageSchema = z.object({
   ...messageBaseSchema,
   role: z.literal("tool-response"),
   toolId: z.string(),
-  success: z.boolean(),
-  output: z.string().optional(),
-  error: z.string().optional(),
-  hint: z.string().optional(),
+  toolSuccess: z.boolean(),
+  toolOutput: z.record(z.any()).optional(),
+  toolError: z.string().optional(),
 });
 
-export type ToolResponseMessage = z.infer<typeof toolResponseMessage>;
+export type ToolResponseMessage = z.infer<typeof toolResponseMessageSchema>;
 
 // Message
 export const messageSchema = z.discriminatedUnion("role", [
   userMessageSchema,
   systemMessageSchema,
   agentMessageSchema,
-  toolResponseMessage,
+  toolResponseMessageSchema,
 ]);
 
 export type Message = z.infer<typeof messageSchema>;
@@ -72,7 +74,7 @@ export const createMessageInputSchema = z.discriminatedUnion("role", [
   userMessageSchema.omit(omitFields).extend({ id: z.string().optional() }),
   systemMessageSchema.omit(omitFields).extend({ id: z.string().optional() }),
   agentMessageSchema.omit(omitFields).extend({ id: z.string().optional() }),
-  toolResponseMessage.omit(omitFields).extend({ id: z.string().optional() }),
+  toolResponseMessageSchema.omit(omitFields).extend({ id: z.string().optional() }),
 ]);
 
 export type CreateMessageInput = z.infer<typeof createMessageInputSchema>;
@@ -82,27 +84,44 @@ export const updateMessageInputSchema = z.discriminatedUnion("role", [
   userMessageSchema.omit(omitFields),
   systemMessageSchema.omit(omitFields),
   agentMessageSchema.omit(omitFields),
-  toolResponseMessage.omit(omitFields),
+  toolResponseMessageSchema.omit(omitFields),
 ]);
 
 export type UpdateMessageInput = z.infer<typeof updateMessageInputSchema>;
 
 // Tool definition
-export const toolDefinitionSchema = z.object({
-  id: z.string(),
+export const toolSchema = z.object({
   name: z.string(),
   description: z.string(),
   inputSchema: z.instanceof(z.ZodObject),
   outputSchema: z.instanceof(z.ZodObject),
-  run: z.function().args(z.object({})).returns(z.object({})),
+  run: z
+    .function()
+    .args(z.record(z.any()))
+    .returns(
+      z.union([
+        z.object({
+          success: z.boolean(),
+          output: z.record(z.any()).optional(),
+          error: z.string().optional(),
+        }),
+        z.promise(
+          z.object({
+            success: z.boolean(),
+            output: z.record(z.any()).optional(),
+            error: z.string().optional(),
+          }),
+        ),
+      ]),
+    ),
 });
 
-export type ToolDefinition = z.infer<typeof toolDefinitionSchema>;
+export type ToolDefinition = z.infer<typeof toolSchema>;
 
 // Resources
 export const resourcesSchema = z.object({
   messages: z.array(messageSchema),
-  tools: z.array(toolDefinitionSchema),
+  tools: z.array(toolSchema),
 });
 
 export type Resources = z.infer<typeof resourcesSchema>;

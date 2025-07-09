@@ -7,6 +7,27 @@ import { TTSBase, type TTSGenerateJob } from "../base";
 // Config
 export const cartesiaTTSConfigSchema = z.object({
   apiKey: z.string().default(process.env.CARTESIA_API_KEY ?? ""),
+  model: z.enum(["sonic-2", "sonic-turbo", "sonic"]).default("sonic-2"),
+  language: z
+    .enum([
+      "en",
+      "fr",
+      "de",
+      "es",
+      "pt",
+      "zh",
+      "ja",
+      "hi",
+      "it",
+      "ko",
+      "nl",
+      "pl",
+      "ru",
+      "sv",
+      "tr",
+    ])
+    .default("en"),
+  voiceId: z.string().default("e8e5fffb-252c-436d-b842-8879b84445b6"),
 });
 
 // Model
@@ -41,43 +62,30 @@ export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfigSchema> {
     return job;
   }
 
-  protected async _onGeneratePushText(job: TTSGenerateJob, text: string): Promise<void> {
+  protected async _onGeneratePushText(
+    job: TTSGenerateJob,
+    text: string,
+    isLast = false,
+  ): Promise<void> {
     // If the job has already been initialized, continue it
-    if (this.#initializedJobsIds.includes(job.id)) {
-      this.#socket.continue({
-        contextId: job.id,
-        modelId: "sonic-2",
-        language: "en",
-        voice: { mode: "id", id: "bf0a246a-8642-498a-9950-80c35e9276b5" },
-        transcript: text,
-        outputFormat: {
-          container: "raw",
-          encoding: "pcm_s16le",
-          sampleRate: 16000,
-        },
-      });
-    }
-    // Else, initialize a new job response
-    else {
-      const response = await this.#socket.send({
-        contextId: job.id,
-        modelId: "sonic-2",
-        language: "en",
-        voice: { mode: "id", id: "bf0a246a-8642-498a-9950-80c35e9276b5" },
-        transcript: text,
-        continue: true,
-        outputFormat: {
-          container: "raw",
-          encoding: "pcm_s16le",
-          sampleRate: 16000,
-        },
-      });
+    const response = this.#socket.send({
+      contextId: job.id,
+      modelId: "sonic-2",
+      language: this.config.language,
+      voice: { mode: "id", id: this.config.voiceId },
+      transcript: text,
+      outputFormat: {
+        container: "raw",
+        encoding: "pcm_s16le",
+        sampleRate: 16000,
+      },
+      continue: !isLast,
+      maxBufferDelayMs: 100,
+    });
 
-      // Set the job to have history
+    if (!this.#initializedJobsIds.includes(job.id)) {
       this.#initializedJobsIds.push(job.id);
-
-      // Receive the job's messages
-      response.on("message", (msgString: string) => {
+      (await response).on("message", (msgString: string) => {
         // If the job has been aborted, ignore incoming messages
         if (job.raw.abortController.signal.aborted) return;
 

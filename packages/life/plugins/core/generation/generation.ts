@@ -1,167 +1,184 @@
 import type { Agent } from "@/agent/agent";
-import { type Resources, toolRequestSchema } from "@/agent/resources";
+import type { Resources, ToolRequests } from "@/agent/resources";
 import type { LLMGenerateMessageJob } from "@/models/llm/base";
 import type { TTSGenerateJob } from "@/models/tts/base";
 import { AsyncQueue } from "@/shared/async-queue";
-import { z } from "zod";
-import type { ContinueOperation, SayOperation } from "./operations";
+import { newId } from "@/shared/prefixed-id";
+import type { CoreEvent } from "../plugin";
 
-// Output chunk
-export const generationChunkSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("content"),
-    voiceChunk: z.instanceof(Int16Array),
-    textChunk: z.string(),
-  }),
-  z.object({
-    type: z.literal("tool-request"),
-    toolRequest: toolRequestSchema,
-  }),
-  z.object({
-    type: z.literal("resources-request"),
-  }),
-  z.object({
-    type: z.literal("end"),
-  }),
-]);
+export type GenerationChunk =
+  | { type: "content"; textChunk: string; voiceChunk?: Int16Array }
+  | { type: "tool-requests"; requests: ToolRequests }
+  | { type: "end" };
 
-export type GenerationChunk = z.infer<typeof generationChunkSchema>;
-
-// Generation
 export class Generation {
-  #agent: Agent;
-
-  #resources: Resources | null = null;
-  #resourcesResolve: ((value: unknown) => void) | null = null;
-  #toolsRequests: Record<string, boolean> = {};
-
-  #llmEnded = false;
-  #llmJob: LLMGenerateMessageJob | null = null;
-  #ttsJob: Promise<TTSGenerateJob>;
+  id = newId("generation");
+  queue: AsyncQueue<GenerationChunk> = new AsyncQueue();
+  status: "idle" | "generating" | "playing" | "ended" = "idle";
 
   prefix = "";
   needContinue = false;
   preventInterruption = false;
 
-  status: "idle" | "running" | "waiting" | "ended" = "idle";
-  waitingFor?: "tools" | "resources";
-  queue: AsyncQueue<GenerationChunk> = new AsyncQueue();
+  // Track whether this generation has already output some chunks
+  hasOutputted = false;
 
-  constructor(agent: Agent) {
-    this.#agent = agent;
-    this.#ttsJob = this.#agent.models.tts.generate();
+  #agent: Agent;
+  #voiceEnabled: boolean;
 
-    // this.queue.onConsumption(() => {
-    //   this.#availableChunksCount++;
-    // });
+  #llmJob: LLMGenerateMessageJob | null = null;
+  #ttsJob: TTSGenerateJob | null = null;
+  #toolRequests: ToolRequests | null = null;
+
+  #onGenerationEndCallbacks: (() => void)[] = [];
+
+  constructor(params: { agent: Agent; voiceEnabled: boolean }) {
+    this.#agent = params.agent;
+    this.#voiceEnabled = params.voiceEnabled;
   }
 
-  addContinue(operation: ContinueOperation) {
-    if (this.status !== "idle") throw new Error("Cannot add continue operation when not idle");
-    this.needContinue = true;
+  canBeInterrupted() {
+    return !this.preventInterruption && (this.status === "generating" || this.status === "playing");
+  }
+
+  canStart() {
+    return this.status === "idle" && (this.prefix || this.needContinue);
+  }
+
+  addInsertEvent(event: Extract<CoreEvent, { type: "agent.continue" | "agent.say" }>) {
+    // Error if not idle, the orchestrator should not append insert events to a non-idle generation
+    if (this.status !== "idle")
+      throw new Error("Cannot add continue/say operation when not idle or waiting.");
+
+    // Set the continue, prefix, and interruptions attributes
+    if (event.type === "agent.continue") this.needContinue = true;
+    else if (event.type === "agent.say") this.prefix += event.data.text;
     if (!this.preventInterruption)
-      this.preventInterruption = operation.preventInterruption ?? false;
+      this.preventInterruption = event.data.preventInterruption ?? false;
   }
 
-  addSay(operation: SayOperation) {
-    if (this.status !== "idle") throw new Error("Cannot add say operation when not idle");
-    this.prefix += operation.text;
-    if (!this.preventInterruption)
-      this.preventInterruption = operation.preventInterruption ?? false;
+  async start(resources?: Resources) {
+    // Throw the generation is already running, shouldn't happen
+    if (this.status !== "idle") throw new Error("Cannot start generation when not idle.");
+
+    // Set status to running
+    this.status = "generating";
+
+    // Start generations jobs
+    if (this.#voiceEnabled) {
+      this.#ttsJob = await this.#agent.models.tts.generate();
+      this.#startTTS();
+    }
+    this.#startLLM(resources);
   }
 
-  addResources(resources: Resources) {
-    if (this.status !== "waiting" || this.waitingFor !== "resources")
-      throw new Error("This generation is not waiting for resources.");
-    if (this.#resources) throw new Error("Resources already set.");
-    this.#resources = resources;
-    this.#resourcesResolve?.(resources);
-    this.#resourcesResolve = null;
+  async #startTTS() {
+    if (!this.#ttsJob) throw new Error("TTS job not initialized, should not happen.");
+
+    // Process TTS stream (queue will be consumed by the orchestrator)
+    for await (const chunk of this.#ttsJob.getStream()) {
+      if (chunk.type === "content")
+        this.queue.push({
+          type: "content",
+          textChunk: chunk.textChunk,
+          voiceChunk: chunk.voiceChunk,
+        });
+      else if (chunk.type === "end") {
+        if (this.#toolRequests) {
+          this.queue.push({ type: "tool-requests", requests: this.#toolRequests });
+        }
+        this.playing();
+        break;
+      } else if (chunk.type === "error") console.error("TTS error", chunk);
+      this.hasOutputted = true;
+    }
   }
 
-  addToolResponse(toolId: string) {
-    this.#toolsRequests[toolId] = true;
-    // If all tools requests have been received, start LLM again
-    if (Object.values(this.#toolsRequests).every((value) => value)) this.startLLM();
-  }
+  async #startLLM(resources?: Resources) {
+    // If a transcribe prefix is provided, push it to the TTS job
+    if (this.prefix) {
+      if (this.#voiceEnabled) this.#ttsJob?.pushText(this.prefix);
+      else this.queue.push({ type: "content", textChunk: this.prefix });
+    }
 
-  // Count the number of tools requests expected and received and resume if all received
-  async startLLM() {
-    const ttsJob = await this.#ttsJob;
-
-    // Transcribe the prefix if any
-    if (this.prefix) ttsJob.pushText(this.prefix);
-
-    // If doesn't need to continue, return
+    // If doesn't need to continue, end generation
     if (!this.needContinue) {
-      this.#llmEnded = true;
+      if (this.#voiceEnabled) this.#ttsJob?.pushText("", true);
+      else this.playing();
       return;
     }
 
-    // Else, if not idle or waiting, throw
-    if (this.status !== "idle" && this.status !== "waiting")
-      throw new Error("Cannot run LLM when not idle or waiting.");
-    if (this.status === "waiting" && this.waitingFor !== "tools")
-      throw new Error("Cannot run LLM when not waiting for tools.");
-
-    // Request resources
-    this.status = "waiting";
-    this.waitingFor = "resources";
-
-    // Wait for resources
-    this.queue.push({ type: "resources-request" });
-    await new Promise((resolve) => (this.#resourcesResolve = resolve));
-    this.waitingFor = undefined;
-    this.status = "running";
+    // Errors if continue is requested but no resources are provided
+    if (!resources) throw new Error("Resources are required to continue LLM generation.");
 
     // Start LLM generation
-    const llmJob = await this.#agent.models.llm.generateMessage({
-      messages: this.#resources?.messages ?? [],
-      tools: this.#resources?.tools ?? [],
-    });
-    this.#llmJob = llmJob;
+    this.#llmJob = await this.#agent.models.llm.generateMessage(resources);
 
-    // Stream received tokens
-    for await (const chunk of llmJob.getStream()) {
-      if (chunk.type === "content") ttsJob.pushText(chunk.content);
-      else if (chunk.type === "tool") {
-        this.#toolsRequests[chunk.toolId] = false;
-        // TODO: In the future maybe allow actions/tools to define whether they accept to be called in advance
-        // In case of long generations, as tool requests are emitted immediately, those tools could be called
-        // 5-10s before the generation audio is played. In some case it's totally fine, in some other it's not.
-        this.queue.push({
-          type: "tool-request",
-          toolRequest: { id: chunk.toolId, input: chunk.toolInput },
-        });
-      } else if (chunk.type === "end") this.#llmEnded = true;
+    // Forward stream chunks to TTS
+    let hasContent = false;
+    for await (const chunk of this.#llmJob.getStream()) {
+      // If voice is enabled, forward chunks to TTS job
+      if (this.#voiceEnabled) {
+        // - Content
+        if (chunk.type === "content") {
+          this.#ttsJob?.pushText(chunk.content);
+          hasContent = true;
+        }
+        // - Tools
+        else if (chunk.type === "tools") {
+          if (hasContent) this.#toolRequests = chunk.tools;
+          else {
+            this.hasOutputted = true;
+            this.queue.push({ type: "tool-requests", requests: chunk.tools });
+            break;
+          }
+        }
+        // - End
+        else if (chunk.type === "end") {
+          this.#ttsJob?.pushText("", true);
+          break;
+        }
+      }
+      // Else, push chunks directly to the queue
+      else {
+        // - Content
+        if (chunk.type === "content")
+          this.queue.push({ type: "content", textChunk: chunk.content });
+        // - Tools
+        else if (chunk.type === "tools") {
+          this.queue.push({ type: "tool-requests", requests: chunk.tools });
+          this.playing();
+          break;
+        }
+        // - End
+        else if (chunk.type === "end") {
+          this.playing();
+          break;
+        }
+        this.hasOutputted = true;
+      }
     }
   }
 
-  async startTTS() {
-    const ttsJob = await this.#ttsJob;
-    for await (const chunk of ttsJob.getStream()) {
-      if (chunk.type === "content") {
-        this.queue.push({
-          type: "content",
-          voiceChunk: chunk.voiceChunk,
-          textChunk: chunk.textChunk,
-        });
-      } else if (chunk.type === "end" && this.#llmEnded) this.queue.push({ type: "end" });
-    }
+  onGenerationEnd(callback: () => void) {
+    this.#onGenerationEndCallbacks.push(callback);
   }
 
-  async start() {
-    // Start a first LLM generation
-    await this.startLLM();
-
-    // Start TTS generation
-    await this.startTTS();
+  playing() {
+    this.status = "playing";
+    this.queue.push({ type: "end" });
+    for (const callback of this.#onGenerationEndCallbacks) callback();
   }
 
-  async stop() {
+  // Called by the orchestrator when end chunks are consumed
+  end() {
+    // Cancel any ongoing LLM job
     if (this.#llmJob) this.#llmJob.cancel();
-    const ttsJob = await this.#ttsJob;
-    ttsJob.cancel();
+
+    // Cancel any ongoing TTS job
+    if (this.#ttsJob) this.#ttsJob.cancel();
+
+    // Push an end chunk and update status
     this.status = "ended";
   }
 }
