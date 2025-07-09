@@ -1,5 +1,17 @@
 # life
 
+## 0.5.0
+
+### Minor Changes
+
+- [@Cheelax](https://github.com/Cheelax) **(New contributor! 🎉)**, [@LilaRest](https://github.com/LilaRest) in [#65](https://github.com/lifejs/lifejs/pull/65) — Support Mistral.ai LLM provider
+- [@LilaRest](https://github.com/LilaRest) in [1c22c1c](https://github.com/lifejs/lifejs/commit/1c22c1ce90c48f765938f78675be01715c1651db) — Add all models and available languages to Cartesia TTS config schema
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [a44c42d](https://github.com/lifejs/lifejs/commit/a44c42da884d662f004eabc146d906683c6e5731) — Generation interruptions weren't working in the case the generation had ended, but it's produced content was still being played. This commit fixes that.
+- [@LilaRest](https://github.com/LilaRest) in [4d397bd](https://github.com/lifejs/lifejs/commit/4d397bdec16b38a5fb47be8a9f8b15a30cea4508) — Disable output stream throttling in text-only mode
+
 ## 0.4.0
 
 ### Minor Changes
