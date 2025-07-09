@@ -3,15 +3,10 @@ ensureServer("transport.server.Transport");
 import superjson from "superjson";
 import type { z } from "zod";
 
-export type ServerTransportEvent =
-  | {
-      type: "audio-chunk";
-      chunk: Int16Array;
-    }
-  | {
-      type: "user-audio-chunk";
-      chack: Int16Array;
-    };
+export type ServerTransportEvent = {
+  type: "audio-chunk";
+  chunk: Int16Array;
+};
 
 export abstract class ServerTransportBase<ConfigSchema extends z.AnyZodObject> {
   config: z.infer<ConfigSchema>;

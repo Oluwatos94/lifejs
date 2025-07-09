@@ -85,17 +85,17 @@ export const corePlugin = definePlugin("core")
   .events({
     "messages.create": { dataSchema: createMessageInputSchema },
     "messages.update": { dataSchema: updateMessageInputSchema },
-    "user.audio-chunk": { dataSchema: z.object({ audioChunk: z.instanceof(Int16Array) }) },
+    "user.audio-chunk": { dataSchema: z.object({ audioChunk: z.custom<Int16Array>() }) },
     "user.voice-start": {},
     "user.voice-chunk": {
       dataSchema: z.discriminatedUnion("type", [
         z.object({
           type: z.literal("voice"),
-          voiceChunk: z.instanceof(Int16Array),
+          voiceChunk: z.custom<Int16Array>(),
         }),
         z.object({
           type: z.literal("padding"),
-          voiceChunk: z.instanceof(Int16Array),
+          voiceChunk: z.custom<Int16Array>(),
           paddingSide: z.enum(["pre", "post"]),
           paddingIndex: z.number(),
         }),
@@ -152,7 +152,7 @@ export const corePlugin = definePlugin("core")
       }),
     },
     "agent.text-chunk": { dataSchema: z.object({ textChunk: z.string() }) },
-    "agent.voice-chunk": { dataSchema: z.object({ voiceChunk: z.instanceof(Int16Array) }) },
+    "agent.voice-chunk": { dataSchema: z.object({ voiceChunk: z.custom<Int16Array>() }) },
     "agent.speaking-start": {}, // start of output stream
     "agent.speaking-end": {}, // end of output stream
     "agent.thinking-start": {}, // start of generation

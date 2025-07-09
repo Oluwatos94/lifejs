@@ -108,6 +108,6 @@ export class DeepgramSTT extends STTBase<typeof deepgramSTTConfigSchema> {
 
   // biome-ignore lint/suspicious/useAwait: <explanation>
   protected async _onGeneratePushVoice(job: STTGenerateJob, pcm: Int16Array) {
-    this.#jobsSockets.get(job.id)?.send(pcm);
+    this.#jobsSockets.get(job.id)?.send(pcm.buffer);
   }
 }
