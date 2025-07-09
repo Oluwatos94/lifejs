@@ -17,7 +17,7 @@ import { RollingBuffer } from "@/shared/rolling-buffer";
 import { stableDeepEqual } from "@/shared/stable-deep-equal";
 import { serializeError } from "serialize-error";
 import { z } from "zod";
-import { type PluginEvent, definePlugin } from "../definition";
+import { definePlugin } from "../definition";
 import { GenerationOrchestrator } from "./generation/orchestrator";
 
 // Core plugin
@@ -479,18 +479,10 @@ export const corePlugin = definePlugin("core")
     }
   })
   // 7. Handle generation operations
-  .addService("handle-generation", async ({ agent, emit, queue }) => {
-    // Init the generation orchestrator
-    const orchestrator = new GenerationOrchestrator({
-      agent,
-      emit,
-      coreQueueSome: (predicate) => queue.some(({ event }) => predicate(event)),
-    });
-
-    // Forward events to the orchestrator
-    for await (const { event, context } of queue) {
-      orchestrator.scheduleGenerations(event, context.voiceEnabled);
-    }
+  .addService("handle-generation", (params) => {
+    // Consider the complexity of the generation logic, it's offloaded to an orchestrator class for easier maintenance
+    const orchestrator = new GenerationOrchestrator(params);
+    orchestrator.start();
   })
   // 8. Handle resources requests
   .addEffect("handle-resources", ({ event, emit, context, config }) => {
@@ -545,5 +537,3 @@ export const corePlugin = definePlugin("core")
       agent.transport.streamAudioChunk(event.data.voiceChunk);
     }
   });
-
-export type CoreEvent = PluginEvent<typeof corePlugin._definition.events, "output">;

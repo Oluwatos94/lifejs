@@ -13,9 +13,6 @@ typesafe experience).
 export type EmitFunction<EventsDef extends PluginEventsDef = PluginEventsDef> = (
   event: PluginEvent<EventsDef, "input">,
 ) => string;
-export type WaitUntilFunction<Context extends PluginContext = PluginContext> = (
-  test: (params: { context: Context }) => boolean,
-) => Promise<void>;
 
 // - Dependencies
 export type PluginDependency<
@@ -225,7 +222,6 @@ export type PluginServiceFunction<
   methods: Methods;
   dependencies: Dependencies;
   emit: EmitFunction<EventsDef>;
-  waitUntil: WaitUntilFunction<Context>;
 }) => void | Promise<void>;
 
 // - Interceptors

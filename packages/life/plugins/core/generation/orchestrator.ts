@@ -4,16 +4,23 @@ import type { EmitFunction, PluginEvent } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/prefixed-id";
 import { z } from "zod";
-import type { CoreEvent, corePlugin } from "../plugin";
+import type { corePlugin } from "../plugin";
 import { Generation, type GenerationChunk } from "./generation";
+
+export type CoreEvent = PluginEvent<typeof corePlugin._definition.events, "output">;
+type CoreContext = typeof corePlugin._definition.context;
+type CoreParams = {
+  agent: Agent;
+  emit: EmitFunction<typeof corePlugin._definition.events>;
+  queue: AsyncQueue<{ event: CoreEvent; context: CoreContext }>;
+  context: CoreContext;
+};
 
 // Orchestrator
 export class GenerationOrchestrator {
-  #agent: Agent;
-  #emit: EmitFunction<typeof corePlugin._definition.events>;
-  #coreQueueSome: (predicate: (event: CoreEvent) => boolean) => boolean;
+  #core: CoreParams;
+
   #consumeQueue: AsyncQueue<Generation> = new AsyncQueue();
-  #voiceEnabled = false;
 
   #generations: Generation[] = [];
   #decidePromises: {
@@ -25,20 +32,90 @@ export class GenerationOrchestrator {
   #generationsResourcesRequestsIds: Record<string, string> = {};
   #resourcesResponses: Record<string, Resources> = {};
 
-  #isThinking = false;
-  #isSpeaking = false;
+  constructor(params: Omit<CoreParams, "context">) {
+    this.#core = params as CoreParams;
+  }
 
-  constructor(params: {
-    agent: Agent;
-    emit: (event: PluginEvent<typeof corePlugin._definition.events, "input">) => string;
-    coreQueueSome: (predicate: (event: CoreEvent) => boolean) => boolean;
-  }) {
-    this.#agent = params.agent;
-    this.#emit = params.emit;
-    this.#coreQueueSome = params.coreQueueSome;
-
-    // Start the orchestrator
+  async start() {
+    // Start consuming generations
     this.#consumeGenerations();
+
+    // Start processing events
+    for await (const { event, context } of this.#core.queue) {
+      // Update the context
+      this.#core.context = context;
+
+      // Ignore non-generation events
+      if (!event || !this.#isGenerationEvent(event)) return;
+
+      // If there are remaining operations to process, wait
+      if (this.#isQueueBusy()) return console.log("😡 QUEUE WAS BUSY");
+
+      // Retrieve first idle generation
+      let generation = this.#generations.find((generation) => generation.status === "idle");
+
+      // If there is no idle generation, create one
+      if (!generation) {
+        generation = new Generation({
+          agent: this.#core.agent,
+          voiceEnabled: this.#core.context.voiceEnabled,
+        });
+        this.#generations.push(generation);
+      }
+
+      // Handle the event if (any)
+      if (event.type === "agent.continue") this.#processInsertEvent(generation, event);
+      else if (event.type === "agent.say") this.#processInsertEvent(generation, event);
+      else if (event.type === "agent.decide") this.#processDecideEvent(generation, event);
+      else if (event.type === "agent.interrupt") this.#processInterruptEvent(event);
+      else if (event.type === "agent.resources-response")
+        this.#processResourcesResponseEvent(event);
+
+      // If the generation is not ready to start yet, return
+      if (!generation.canStart()) return;
+
+      // If that was a continue operation, request resources
+      if (event.type === "agent.continue") {
+        const requestId = this.#core.emit({ type: "agent.resources-request" });
+        this.#generationsResourcesRequestsIds[generation.id] = requestId;
+      }
+
+      // If the generation has continue but no resources yet, wait
+      if (
+        generation.needContinue &&
+        !((this.#generationsResourcesRequestsIds[generation.id] ?? "") in this.#resourcesResponses)
+      )
+        return;
+
+      // Find any currently running generation
+      const runningGeneration = this.#generations.find(
+        (g) => g.status === "generating" || g.status === "playing",
+      );
+
+      if (runningGeneration) {
+        // DO NOTHING FOR NOW
+        // - If the running generation is about to end, start the next one
+        // - If smooth interruption is requested, sync both generations for a smooth transition
+        //   - If not possible interrupt abruptly
+      }
+
+      // Or if there is no running generation, start the generation immediately
+      else {
+        const resourceRequestId = this.#generationsResourcesRequestsIds[generation.id];
+        if (!this.#core.context.status.thinking) {
+          this.#core.emit({ type: "agent.thinking-start", urgent: true });
+          this.#core.context.status.thinking = true;
+        }
+        generation.start(
+          resourceRequestId ? this.#resourcesResponses[resourceRequestId] : undefined,
+        );
+        generation.onGenerationEnd(() => {
+          this.#core.emit({ type: "agent.thinking-end", urgent: true });
+          this.#core.context.status.thinking = false;
+        });
+        this.#consumeQueue.push(generation);
+      }
+    }
   }
 
   #processInterruptEvent(event: Extract<CoreEvent, { type: "agent.interrupt" }>) {
@@ -54,7 +131,7 @@ export class GenerationOrchestrator {
 
     // If at least one generation was interrupted, notify the interruption
     if (interrupted) {
-      this.#emit({
+      this.#core.emit({
         type: "agent.interrupted",
         data: {
           reason: event.data.reason,
@@ -75,7 +152,7 @@ export class GenerationOrchestrator {
       id,
       event,
       promise: (async () => {
-        const result = await this.#agent.models.llm.generateObject({
+        const result = await this.#core.agent.models.llm.generateObject({
           messages: [
             {
               id: newId("message"),
@@ -117,7 +194,7 @@ export class GenerationOrchestrator {
           }),
         });
         if (result.success && result.data.shouldContinue && generation.status === "idle") {
-          this.#emit({ type: "agent.continue", data: event.data, urgent: true });
+          this.#core.emit({ type: "agent.continue", data: event.data, urgent: true });
         }
 
         // Remove the promise from the list
@@ -174,77 +251,7 @@ export class GenerationOrchestrator {
   }
 
   #isQueueBusy() {
-    return this.#coreQueueSome((event) => this.#isGenerationEvent(event));
-  }
-
-  scheduleGenerations(event: CoreEvent, voiceEnabled: boolean): unknown {
-    // Update the voice enabled flag
-    this.#voiceEnabled = voiceEnabled;
-
-    // Ignore non-generation events
-    if (!event || !this.#isGenerationEvent(event)) return;
-
-    // If there are remaining operations to process, wait
-    if (this.#isQueueBusy()) return console.log("😡 QUEUE WAS BUSY");
-
-    // Retrieve first idle generation
-    let generation = this.#generations.find((generation) => generation.status === "idle");
-
-    // If there is no idle generation, create one
-    if (!generation) {
-      generation = new Generation({ agent: this.#agent, voiceEnabled: this.#voiceEnabled });
-      this.#generations.push(generation);
-    }
-
-    // Handle the event if (any)
-    if (event.type === "agent.continue") this.#processInsertEvent(generation, event);
-    else if (event.type === "agent.say") this.#processInsertEvent(generation, event);
-    else if (event.type === "agent.decide") this.#processDecideEvent(generation, event);
-    else if (event.type === "agent.interrupt") this.#processInterruptEvent(event);
-    else if (event.type === "agent.resources-response") this.#processResourcesResponseEvent(event);
-
-    // If the generation is not ready to start yet, return
-    if (!generation.canStart()) return;
-
-    // If that was a continue operation, request resources
-    if (event.type === "agent.continue") {
-      const requestId = this.#emit({ type: "agent.resources-request" });
-      this.#generationsResourcesRequestsIds[generation.id] = requestId;
-    }
-
-    // If the generation has continue but no resources yet, wait
-    if (
-      generation.needContinue &&
-      !((this.#generationsResourcesRequestsIds[generation.id] ?? "") in this.#resourcesResponses)
-    )
-      return;
-
-    // Find any currently running generation
-    const runningGeneration = this.#generations.find(
-      (g) => g.status === "generating" || g.status === "playing",
-    );
-
-    if (runningGeneration) {
-      // DO NOTHING FOR NOW
-      // - If the running generation is about to end, start the next one
-      // - If smooth interruption is requested, sync both generations for a smooth transition
-      //   - If not possible interrupt abruptly
-    }
-
-    // Or if there is no running generation, start the generation immediately
-    else {
-      const resourceRequestId = this.#generationsResourcesRequestsIds[generation.id];
-      if (!this.#isThinking) {
-        this.#emit({ type: "agent.thinking-start", urgent: true });
-        this.#isThinking = true;
-      }
-      generation.start(resourceRequestId ? this.#resourcesResponses[resourceRequestId] : undefined);
-      generation.onGenerationEnd(() => {
-        this.#emit({ type: "agent.thinking-end", urgent: true });
-        this.#isThinking = false;
-      });
-      this.#consumeQueue.push(generation);
-    }
+    return this.#core.queue.some(({ event }) => this.#isGenerationEvent(event));
   }
 
   async #consumeGenerations() {
@@ -256,23 +263,23 @@ export class GenerationOrchestrator {
     for await (const generation of this.#consumeQueue) {
       for await (const chunk of limiter(generation.queue)) {
         // Set speaking status on first content chunk
-        if (!this.#isSpeaking && chunk.type === "content") {
-          this.#emit({ type: "agent.speaking-start", urgent: true });
-          this.#isSpeaking = true;
+        if (!this.#core.context.status.speaking && chunk.type === "content") {
+          this.#core.emit({ type: "agent.speaking-start", urgent: true });
+          this.#core.context.status.speaking = true;
         }
 
         // Forward content chunks to core
         if (chunk.type === "content") {
           if (chunk.textChunk.length)
-            this.#emit({ type: "agent.text-chunk", data: { textChunk: chunk.textChunk } });
-          if (this.#voiceEnabled && chunk.voiceChunk?.length)
-            this.#emit({ type: "agent.voice-chunk", data: { voiceChunk: chunk.voiceChunk } });
+            this.#core.emit({ type: "agent.text-chunk", data: { textChunk: chunk.textChunk } });
+          if (this.#core.context.voiceEnabled && chunk.voiceChunk?.length)
+            this.#core.emit({ type: "agent.voice-chunk", data: { voiceChunk: chunk.voiceChunk } });
         }
 
         // Forward tool requests to core
         else if (chunk.type === "tool-requests") {
           if (chunk.requests.length)
-            this.#emit({ type: "agent.tool-requests", data: chunk.requests });
+            this.#core.emit({ type: "agent.tool-requests", data: chunk.requests });
         }
 
         // Or if this is the end of the generation
@@ -284,9 +291,9 @@ export class GenerationOrchestrator {
           this.#generations = this.#generations.filter((g) => g.id !== generation.id);
 
           // If this is the last generation, notify the end of speaking
-          if (this.#isSpeaking && this.#consumeQueue.length() === 0) {
-            this.#emit({ type: "agent.speaking-end", urgent: true });
-            this.#isSpeaking = false;
+          if (this.#core.context.status.speaking && this.#consumeQueue.length() === 0) {
+            this.#core.emit({ type: "agent.speaking-end", urgent: true });
+            this.#core.context.status.speaking = false;
           }
 
           // Move to the next generation (if any)

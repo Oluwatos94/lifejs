@@ -4,7 +4,7 @@ import type { LLMGenerateMessageJob } from "@/models/llm/base";
 import type { TTSGenerateJob } from "@/models/tts/base";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/prefixed-id";
-import type { CoreEvent } from "../plugin";
+import type { CoreEvent } from "./orchestrator";
 
 export type GenerationChunk =
   | { type: "content"; textChunk: string; voiceChunk?: Int16Array }

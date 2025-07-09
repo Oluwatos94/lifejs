@@ -6,17 +6,10 @@ import type {
   PluginDefinition,
   PluginEvent,
   PluginEventsDef,
-  WaitUntilFunction,
 } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
 import { klona } from "@/shared/klona";
 import { newId } from "@/shared/prefixed-id";
-
-// - Types
-type WaitUntilItem<Context extends PluginContext> = {
-  test: Parameters<WaitUntilFunction<Context>>[0];
-  resolve: () => void;
-};
 
 // - Runner
 export class PluginRunner<const Definition extends PluginDefinition> {
@@ -32,8 +25,6 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     event: PluginEvent<PluginEventsDef, "output">;
     context: Readonly<PluginContext>;
   }>[] = [];
-  #pendingWaitUntils: WaitUntilItem<Definition["context"]>[] = [];
-  #newWaitUntils: WaitUntilItem<Definition["context"]>[] = [];
 
   constructor(agent: Agent, def: Definition, config: PluginConfig<Definition["config"], "output">) {
     this.#agent = agent;
@@ -63,7 +54,6 @@ export class PluginRunner<const Definition extends PluginDefinition> {
         config: this.#config,
         methods: this.#finalMethods,
         emit: this.emit.bind(this) as EmitFunction,
-        waitUntil: this.waitUntil.bind(this) as WaitUntilFunction,
         dependencies: {}, // TODO
       });
     }
@@ -95,34 +85,6 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     return id;
   }
 
-  waitUntil(test: (params: { context: Definition["context"] }) => boolean) {
-    return new Promise<void>((resolve) => {
-      this.#newWaitUntils.push({ test, resolve });
-    });
-  }
-
-  #checkPendingWaitUntil() {
-    // Safely extract new waitUntil calls using pop()
-    const allWaitUntils = [...this.#pendingWaitUntils];
-    let newItem: WaitUntilItem<Definition["context"]> | undefined;
-    while ((newItem = this.#newWaitUntils.pop())) allWaitUntils.push(newItem);
-
-    const stillPending: WaitUntilItem<Definition["context"]>[] = [];
-
-    for (const waitUntilItem of allWaitUntils) {
-      const { test, resolve } = waitUntilItem;
-      try {
-        if (test({ context: this.#definition.context })) resolve();
-        else stillPending.push(waitUntilItem);
-      } catch (error) {
-        // If test throws, keep it pending
-        // TODO: Log error
-      }
-    }
-
-    this.#pendingWaitUntils = stillPending;
-  }
-
   async start() {
     for await (const event of this.#queue) {
       // if (
@@ -144,10 +106,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
         });
       }
 
-      // 2. Check and resolve pending waitUntil
-      this.#checkPendingWaitUntil();
-
-      // 3. Feed services' queues
+      // 2. Feed services' queues
       for (const queue of this.#servicesQueues) {
         queue.push({
           event: klona(event),
