@@ -9,16 +9,12 @@ export const ttsProviders = {
 export type TTSProvider = (typeof ttsProviders)[keyof typeof ttsProviders]["class"];
 
 // Config
-export type TTSProviderConfigInput = {
-  [K in keyof typeof ttsProviders]: { provider: K } & z.input<
-    (typeof ttsProviders)[K]["configSchema"]
-  >;
-};
-export type TTSProviderConfig = {
-  [K in keyof typeof ttsProviders]: { provider: K } & z.output<
-    (typeof ttsProviders)[K]["configSchema"]
-  >;
+export type TTSProviderConfig<T extends "input" | "output"> = {
+  [K in keyof typeof ttsProviders]: { provider: K } & (T extends "input"
+    ? z.input<(typeof ttsProviders)[K]["configSchema"]>
+    : z.output<(typeof ttsProviders)[K]["configSchema"]>);
 }[keyof typeof ttsProviders];
+
 export const ttsProviderConfigSchema = z.discriminatedUnion(
   "provider",
   Object.entries(ttsProviders).map(([key, { configSchema }]) =>

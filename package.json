@@ -11,7 +11,8 @@
     "dev": "turbo run dev --concurrency=100%",
     "deploy": "bun run build && changeset publish",
     "change": "changeset add",
-    "version": "changeset version"
+    "version": "changeset version",
+    "test": "bun test"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

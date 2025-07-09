@@ -2,12 +2,6 @@ export class AsyncQueue<T> implements AsyncIterator<T>, AsyncIterable<T> {
   #buf: T[] = [];
   #wakeUp?: () => void;
   #closed = false;
-  #onConsumption?: (value: T) => void;
-
-  onConsumption(callback: (value: T) => void) {
-    this.#onConsumption = callback;
-    return this; // for method chaining
-  }
 
   push(v: T) {
     if (this.#closed) return;
@@ -38,10 +32,7 @@ export class AsyncQueue<T> implements AsyncIterator<T>, AsyncIterable<T> {
   async next(): Promise<IteratorResult<T>> {
     while (true) {
       const value = this.#buf.shift();
-      if (value !== undefined) {
-        this.#onConsumption?.(structuredClone(value)); // Alert the callback when consuming
-        return { value, done: false };
-      }
+      if (value !== undefined) return { value, done: false };
       if (this.#closed) return { value: undefined, done: true };
       await new Promise<void>((res) => (this.#wakeUp = res)); // sleep until push/stop
       this.#wakeUp = undefined;

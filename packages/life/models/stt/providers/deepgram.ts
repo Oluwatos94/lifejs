@@ -48,7 +48,7 @@ export const deepgramSTTConfigSchema = z.object({
       "whisper-medium",
       "whisper-large",
     ])
-    .default("nova-3"),
+    .default("nova-2-general"),
   language: z.string().default("en"),
 });
 
@@ -79,6 +79,9 @@ export class DeepgramSTT extends STTBase<typeof deepgramSTTConfigSchema> {
       numerals: true,
       punctuate: true,
       smart_format: true,
+      endpointing: 0, // VAD is managed by the core plugin
+      no_delay: true,
+
       // Dynamic config
       model: this.config.model,
       language: this.config.language,

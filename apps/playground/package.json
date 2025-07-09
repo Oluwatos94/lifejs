@@ -10,8 +10,9 @@
     "types": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "life": "workspace:^",
     "@tailwindcss/postcss": "^4.1.8",
+    "class-variance-authority": "^0.7.1",
+    "life": "workspace:^",
     "next": "^15.3.3",
     "postcss": "^8.5.4",
     "react": "^19.1.0",

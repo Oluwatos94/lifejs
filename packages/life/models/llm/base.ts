@@ -1,4 +1,4 @@
-import type { Message, ToolDefinition } from "@/agent/resources";
+import type { Message, ToolDefinition, ToolRequests } from "@/agent/resources";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/prefixed-id";
 import type { z } from "zod";
@@ -6,7 +6,7 @@ import type { z } from "zod";
 // LLMBase.generateMessage()
 export type LLMGenerateMessageStreamChunk =
   | { type: "content"; content: string }
-  | { type: "tool"; toolId: string; toolInput: Record<string, unknown> }
+  | { type: "tools"; tools: ToolRequests }
   | { type: "end" }
   | { type: "error"; error: string };
 

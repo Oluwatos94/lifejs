@@ -56,7 +56,7 @@ async function mergedPRCount(login: string): Promise<number> {
     q: `repo:${repoOrg}/${repoName} is:pr is:merged author:${login}`,
     per_page: 1,
   });
-  return data.total_count; // 0, 1, 2, …
+  return data.total_count;
 }
 
 const changelogFunctions: ChangelogFunctions = {
@@ -84,7 +84,9 @@ const changelogFunctions: ChangelogFunctions = {
 
     // Retrieve whether the author is a new contributor
     const isNewContributor = Object.fromEntries(
-      await Promise.all(authors.map(async (a) => [a, (await mergedPRCount(a)) <= 1])),
+      await Promise.all(
+        authors.map(async (a) => [a, a === "LilaRest" ? false : (await mergedPRCount(a)) <= 1]),
+      ),
     );
 
     // Generate and return release line

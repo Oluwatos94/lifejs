@@ -9,16 +9,12 @@ export const vadProviders = {
 export type VADProvider = (typeof vadProviders)[keyof typeof vadProviders]["class"];
 
 // Config
-export type VADProviderConfigInput = {
-  [K in keyof typeof vadProviders]: { provider: K } & z.input<
-    (typeof vadProviders)[K]["configSchema"]
-  >;
-};
-export type VADProviderConfig = {
-  [K in keyof typeof vadProviders]: { provider: K } & z.output<
-    (typeof vadProviders)[K]["configSchema"]
-  >;
+export type VADProviderConfig<T extends "input" | "output"> = {
+  [K in keyof typeof vadProviders]: { provider: K } & (T extends "input"
+    ? z.input<(typeof vadProviders)[K]["configSchema"]>
+    : z.output<(typeof vadProviders)[K]["configSchema"]>);
 }[keyof typeof vadProviders];
+
 export const vadProviderConfigSchema = z.discriminatedUnion(
   "provider",
   Object.entries(vadProviders).map(([key, { configSchema }]) =>

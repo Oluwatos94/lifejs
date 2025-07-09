@@ -2,6 +2,10 @@ export class WeightedAverage {
   private weightedSum = 0;
   private totalWeight = 0;
 
+  constructor(initialValue = 0) {
+    this.add(initialValue, 1);
+  }
+
   add(value: number, weight: number) {
     this.weightedSum += value * weight;
     this.totalWeight += weight;

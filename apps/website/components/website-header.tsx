@@ -19,7 +19,6 @@ export const WebsiteHeader: FC<WebsiteHeaderProps> = ({
   const pathname = usePathname();
   const isHomePage = pathname === "/";
   const animateDelay = isHomePage ? 1.2 : 0;
-  console.log(pathname);
 
   return (
     <nav className={cn("h-20", className)} {...props}>

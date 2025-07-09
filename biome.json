@@ -10,7 +10,12 @@
     }
   },
   "files": {
-    "ignore": ["apps/playground", "packages/releases/formatter.js"]
+    "ignore": [
+      "apps/playground",
+      "packages/releases/formatter.js",
+      "packages/life/shared/stable-stringify.ts",
+      "packages/life/shared/klona.ts"
+    ]
   },
   "linter": {
     "rules": {
