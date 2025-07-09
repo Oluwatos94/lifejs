@@ -60,7 +60,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
         toolCalls: message.toolsRequests?.map((request) => ({
           id: request.id,
           function: { 
-            name: request.id, 
+            name: request.toolId, 
             arguments: JSON.stringify(request.input) 
           },
           type: "function" as const,
@@ -220,36 +220,23 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
       // Prepare messages in Mistral format
       const mistralMessages = this.#toMistralMessages(params.messages);
 
-      // Prepare JSON schema
-      const jsonSchema = zodToJsonSchema(params.schema);
-
-      // Generate the object
-      const response = await this.#client.chat.complete({
+      // Generate the object using schema-enforced parse method
+      // This uses Mistral's built-in schema validation with the Zod schema
+      const response = await this.#client.chat.parse({
         model: this.config.model,
         messages: mistralMessages,
         temperature: this.config.temperature,
-        responseFormat: {
-          type: "json_object",
-        },
+        responseFormat: params.schema,
       });
 
-      // Extract content
-      const content = response.choices?.[0]?.message?.content;
-      if (!content) {
-        return { success: false, error: "No content in response" };
+      // Extract parsed content from response - already validated by Mistral API
+      const parsed = response.choices?.[0]?.message?.parsed;
+      if (!parsed) {
+        return { success: false, error: "No parsed content in response" };
       }
 
-      // Parse the response
-      const obj = JSON.parse(content);
-
-      // Validate against schema
-      const parseResult = params.schema.safeParse(obj);
-      if (!parseResult.success) {
-        return { success: false, error: parseResult.error.message };
-      }
-
-      // Return the object
-      return { success: true, data: parseResult.data };
+      // Return the validated object (no additional validation needed)
+      return { success: true, data: parsed };
     } catch (error) {
       return { 
         success: false, 

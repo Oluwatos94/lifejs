@@ -1,6 +1,6 @@
 import type { Message, ToolDefinition } from "@/agent/resources";
 import { z } from "zod";
-import { MistralLLM } from "../mistral";
+import { MistralLLM } from "../providers/mistral";
 
 function createMessage(role: Message["role"], content: string): Message {
   const now = Date.now();
