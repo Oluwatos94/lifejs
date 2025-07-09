@@ -3,6 +3,7 @@ import { Mistral } from "@mistralai/mistralai";
 import type {
   AssistantMessage,
   SystemMessage,
+  Tool,
   ToolMessage,
   UserMessage,
 } from "@mistralai/mistralai/models/components";
@@ -78,12 +79,12 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
         role: "assistant",
         content: message.content,
         toolCalls: message.toolsRequests?.map((request) => ({
+          type: "function",
           id: request.id,
           function: {
             name: request.name,
             arguments: JSON.stringify(request.input),
           },
-          type: "function" as const,
         })),
       };
 
@@ -107,9 +108,9 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
     return messages.map(this.#toMistralMessage.bind(this));
   }
 
-  #toMistralTool(tool: ToolDefinition) {
+  #toMistralTool(tool: ToolDefinition): Tool {
     return {
-      type: "function" as const,
+      type: "function",
       function: {
         name: tool.name,
         description: tool.description,
