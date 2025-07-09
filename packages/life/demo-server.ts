@@ -10,6 +10,11 @@ async function main() {
       transport: {
         provider: "livekit",
       },
+      models: {
+        llm: {
+          provider: "mistral",
+        },
+      },
     })
     .plugins([corePlugin])
     .core({})

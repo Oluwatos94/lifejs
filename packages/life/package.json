@@ -49,6 +49,7 @@
     "@livekit/protocol": "^1.39.0",
     "@livekit/rtc-node": "^0.13.14",
     "@paralleldrive/cuid2": "^2.2.2",
+    "@mistralai/mistralai": "^1.7.3",
     "@zenobius/ink-mouse": "^1.0.3",
     "fast-json-stable-stringify": "^2.1.0",
     "livekit-client": "^2.13.4",
