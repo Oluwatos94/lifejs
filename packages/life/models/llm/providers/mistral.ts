@@ -50,17 +50,17 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
 
   #toMistralMessage(message: Message): UserMessage | AssistantMessage | SystemMessage | ToolMessage {
     if (message.role === "user") {
-      return { role: "user", content: message.content };
+      return { role: "user" as const, content: message.content };
     }
 
     if (message.role === "agent") {
       return {
-        role: "assistant",
+        role: "assistant" as const,
         content: message.content,
         toolCalls: message.toolsRequests?.map((request) => ({
           id: request.id,
           function: { 
-            name: request.toolId, 
+            name: request.name, 
             arguments: JSON.stringify(request.input) 
           },
           type: "function" as const,
@@ -69,14 +69,14 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
     }
 
     if (message.role === "system") {
-      return { role: "system", content: message.content };
+      return { role: "system" as const, content: message.content };
     }
 
     if (message.role === "tool-response") {
       return {
-        role: "tool",
+        role: "tool" as const,
         name: message.toolId,
-        content: JSON.stringify(message.output),
+        content: JSON.stringify(message.toolOutput),
       };
     }
 
@@ -91,7 +91,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
     return {
       type: "function" as const,
       function: {
-        name: tool.id,
+        name: tool.name,
         description: tool.description,
         parameters: zodToJsonSchema(tool.inputSchema),
       },
@@ -120,7 +120,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
       const stream = await this.#client.chat.stream({
         model: this.config.model,
         temperature: this.config.temperature,
-        messages: mistralMessages,
+        messages: mistralMessages as any,
         ...(mistralTools?.length ? { tools: mistralTools } : {}),
       });
 
@@ -142,9 +142,11 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
 
             // Handle content tokens
             if (chunk.data.choices[0]?.delta?.content) {
+              const content = chunk.data.choices[0].delta.content;
+              const contentString = typeof content === 'string' ? content : JSON.stringify(content);
               job.raw.receiveChunk({ 
                 type: "content", 
-                content: chunk.data.choices[0].delta.content 
+                content: contentString 
               });
               continue;
             }
@@ -224,7 +226,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
       // This uses Mistral's built-in schema validation with the Zod schema
       const response = await this.#client.chat.parse({
         model: this.config.model,
-        messages: mistralMessages,
+        messages: mistralMessages as any,
         temperature: this.config.temperature,
         responseFormat: params.schema,
       });

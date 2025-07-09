@@ -15,7 +15,6 @@ function createMessage(role: Message["role"], content: string): Message {
 
 function createSearchTool(): ToolDefinition {
   return {
-    id: "search",
     name: "search",
     description: "Search for information on the web",
     inputSchema: z.object({
@@ -25,14 +24,14 @@ function createSearchTool(): ToolDefinition {
       result: z.string().describe("The search result"),
     }),
     run: async (input: object) => ({
-      result: `Mock search result for: ${(input as { query: string }).query}`,
+      success: true,
+      output: { result: `Mock search result for: ${(input as { query: string }).query}` },
     }),
   };
 }
 
 function createCalculatorTool(): ToolDefinition {
   return {
-    id: "calculator",
     name: "calculator",
     description: "Perform mathematical calculations",
     inputSchema: z.object({
@@ -41,7 +40,10 @@ function createCalculatorTool(): ToolDefinition {
     outputSchema: z.object({
       result: z.number().describe("The calculation result"),
     }),
-    run: async (input: object) => ({ result: Math.random() * 100 }),
+    run: async (input: object) => ({ 
+      success: true, 
+      output: { result: Math.random() * 100 } 
+    }),
   };
 }
 
@@ -91,6 +93,11 @@ async function consumeStream(
           } else if (chunk.type === "tool") {
             results.tools.push({ id: String(chunk.toolId), input: chunk.toolInput });
             results.toolsCalled++;
+            checkInactivity();
+          } else if (chunk.type === "tools") {
+            const tools = chunk.tools as Array<{ id: string; name: string; input: unknown }>;
+            results.tools.push(...tools.map(tool => ({ id: tool.name, input: tool.input })));
+            results.toolsCalled += tools.length;
             checkInactivity();
           } else if (chunk.type === "end") {
             break;
