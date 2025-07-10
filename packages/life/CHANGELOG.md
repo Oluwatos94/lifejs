@@ -1,5 +1,14 @@
 # life
 
+## 0.5.1
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [ed9ef4e](https://github.com/lifejs/lifejs/commit/ed9ef4e2a1a71bb39a54a6bc6d49467f42a220bd) — Fix tools calls formatting in Mistral LLM provider class
+- [@LilaRest](https://github.com/LilaRest) in [ed9ef4e](https://github.com/lifejs/lifejs/commit/ed9ef4e2a1a71bb39a54a6bc6d49467f42a220bd) — A lot of simplification on the orchestration/generation classes of the core plugin
+- [@LilaRest](https://github.com/LilaRest) in [0bfdca7](https://github.com/lifejs/lifejs/commit/0bfdca7744d31fbba780e67708504639bdad47d4) — Fix new Int16Array type error
+- [@LilaRest](https://github.com/LilaRest) in [ed9ef4e](https://github.com/lifejs/lifejs/commit/ed9ef4e2a1a71bb39a54a6bc6d49467f42a220bd) — Mistral LLM provider class wasn't emitting end token
+
 ## 0.5.0
 
 ### Minor Changes
