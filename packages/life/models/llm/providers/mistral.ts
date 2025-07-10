@@ -97,7 +97,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
     if (message.role === "tool-response")
       return {
         role: "tool",
-        name: message.toolId,
+        toolCallId: message.toolId,
         content: JSON.stringify(message.toolOutput),
       };
 
@@ -161,19 +161,23 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
             // Ignore chunks if job was cancelled
             if (job.raw.abortController.signal.aborted) break;
 
+            // Extract the choice and delta (if any)
+            const choice = chunk.data.choices[0];
+            if (!choice) throw new Error("No choice");
+            const delta = choice.delta;
+
             // Handle content tokens
-            if (chunk.data.choices[0]?.delta?.content) {
-              const content = chunk.data.choices[0].delta.content;
+            if (delta.content) {
+              const content = delta.content;
               const contentString = typeof content === "string" ? content : JSON.stringify(content);
               job.raw.receiveChunk({
                 type: "content",
                 content: contentString,
               });
-              continue;
             }
 
             // Handle tool calls tokens
-            const toolCalls = chunk.data.choices[0]?.delta?.toolCalls;
+            const toolCalls = delta.toolCalls;
             if (toolCalls) {
               for (const toolCall of toolCalls) {
                 // Retrieve the tool call ID
@@ -198,10 +202,8 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
             }
 
             // Handle finish reasons
-            const finishReason = chunk.data.choices[0]?.finishReason;
-
-            // Handle tool call completion
-            if (finishReason === "tool_calls") {
+            // - Tool calls completion
+            if (choice.finishReason === "tool_calls") {
               job.raw.receiveChunk({
                 type: "tools",
                 tools: Object.values(pendingToolCalls).map((toolCall) => ({
@@ -213,10 +215,8 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
               pendingToolCalls = {};
             }
 
-            // Handle end of stream
-            if (finishReason === "stop") {
-              job.raw.receiveChunk({ type: "end" });
-            }
+            // - End of stream
+            if (choice.finishReason === "stop") job.raw.receiveChunk({ type: "end" });
           }
         } catch (error) {
           job.raw.receiveChunk({

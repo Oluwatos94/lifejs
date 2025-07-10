@@ -120,7 +120,7 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
 
       for await (const chunk of stream) {
         // Ignore chunks if job was cancelled
-        if (job.raw.abortController.signal.aborted) continue;
+        if (job.raw.abortController.signal.aborted) break;
 
         // Extract the choice and delta (if any)
         const choice = chunk.choices[0];
@@ -128,10 +128,7 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
         const delta = choice.delta;
 
         // Handle content tokens
-        if (delta.content) {
-          job.raw.receiveChunk({ type: "content", content: delta.content });
-          continue;
-        }
+        if (delta.content) job.raw.receiveChunk({ type: "content", content: delta.content });
 
         // Handle tool calls tokens
         if (delta.tool_calls) {
@@ -152,8 +149,9 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
           }
         }
 
-        // Handle tool call completion
-        if (chunk.choices[0]?.finish_reason === "tool_calls") {
+        // Handle finish reasons
+        // - Tool calls completion
+        if (choice.finish_reason === "tool_calls") {
           job.raw.receiveChunk({
             type: "tools",
             tools: Object.values(pendingToolCalls).map((toolCall) => ({
@@ -165,8 +163,8 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
           pendingToolCalls = {};
         }
 
-        // Handle end of stream
-        if (chunk.choices[0]?.finish_reason === "stop") job.raw.receiveChunk({ type: "end" });
+        // - End of stream
+        if (choice.finish_reason === "stop") job.raw.receiveChunk({ type: "end" });
       }
     })();
 

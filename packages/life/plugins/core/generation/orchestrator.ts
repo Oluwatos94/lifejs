@@ -9,7 +9,7 @@ import { Generation, type GenerationChunk } from "./generation";
 
 export type CoreEvent = PluginEvent<typeof corePlugin._definition.events, "output">;
 type CoreContext = typeof corePlugin._definition.context;
-type CoreParams = {
+export type CoreParams = {
   agent: Agent;
   emit: EmitFunction<typeof corePlugin._definition.events>;
   queue: AsyncQueue<{ event: CoreEvent; context: CoreContext }>;
@@ -19,10 +19,9 @@ type CoreParams = {
 // Orchestrator
 export class GenerationOrchestrator {
   #core: CoreParams;
-
-  #consumeQueue: AsyncQueue<Generation> = new AsyncQueue();
-
+  #generationsQueue: AsyncQueue<Generation> = new AsyncQueue();
   #generations: Generation[] = [];
+
   #decidePromises: {
     id: string;
     event: Extract<CoreEvent, { type: "agent.decide" }>;
@@ -45,76 +44,80 @@ export class GenerationOrchestrator {
       // Update the context
       this.#core.context = context;
 
-      // Ignore non-generation events
-      if (!event || !this.#isGenerationEvent(event)) return;
+      // If this is a generation event, process it
+      if (this.#isGenerationEvent(event)) await this.#processGenerationEvent(event);
+    }
+  }
 
-      // If there are remaining operations to process, wait
-      if (this.#isQueueBusy()) return console.log("😡 QUEUE WAS BUSY");
+  async #createGeneration() {
+    // Create the generation
+    const generation = new Generation({
+      agent: this.#core.agent,
+      voiceEnabled: this.#core.context.voiceEnabled,
+    });
+    this.#generations.push(generation);
 
-      // Retrieve first idle generation
-      let generation = this.#generations.find((generation) => generation.status === "idle");
-
-      // If there is no idle generation, create one
-      if (!generation) {
-        generation = new Generation({
-          agent: this.#core.agent,
-          voiceEnabled: this.#core.context.voiceEnabled,
-        });
-        this.#generations.push(generation);
+    // On generation status change, try to update the thinking status
+    generation.onStatusChange(() => {
+      const runningCount = this.#generations.filter((g) => g.status === "started").length;
+      // - If the agent is thinking, but no generation is running, emit thinking end
+      if (this.#core.context.status.thinking) {
+        if (runningCount === 0) this.#core.emit({ type: "agent.thinking-end", urgent: true });
       }
+      // - Or if the agent is not thinking, but a generation is running, emit thinking start
+      else if (runningCount > 0) this.#core.emit({ type: "agent.thinking-start", urgent: true });
+    });
 
-      // Handle the event if (any)
-      if (event.type === "agent.continue") this.#processInsertEvent(generation, event);
-      else if (event.type === "agent.say") this.#processInsertEvent(generation, event);
-      else if (event.type === "agent.decide") this.#processDecideEvent(generation, event);
-      else if (event.type === "agent.interrupt") this.#processInterruptEvent(event);
-      else if (event.type === "agent.resources-response")
-        this.#processResourcesResponseEvent(event);
+    return generation;
+  }
 
-      // If the generation is not ready to start yet, return
-      if (!generation.canStart()) return;
+  async #processGenerationEvent(event: CoreEvent) {
+    // Retrieve or create the first idle generation
+    let generation = this.#generations.find((generation) => generation.status === "idle");
+    if (!generation) generation = await this.#createGeneration();
 
-      // If that was a continue operation, request resources
-      if (event.type === "agent.continue") {
-        const requestId = this.#core.emit({ type: "agent.resources-request" });
-        this.#generationsResourcesRequestsIds[generation.id] = requestId;
-      }
+    // Process the event
+    if (event.type === "agent.continue") this.#processInsertEvent(generation, event);
+    else if (event.type === "agent.say") this.#processInsertEvent(generation, event);
+    else if (event.type === "agent.decide") this.#processDecideEvent(generation, event);
+    else if (event.type === "agent.interrupt") this.#processInterruptEvent(event);
+    else if (event.type === "agent.resources-response") this.#processResourcesResponseEvent(event);
 
-      // If the generation has continue but no resources yet, wait
-      if (
-        generation.needContinue &&
-        !((this.#generationsResourcesRequestsIds[generation.id] ?? "") in this.#resourcesResponses)
-      )
-        return;
+    // If the generation is not ready to start yet, return
+    if (!generation.canStart()) return;
 
-      // Find any currently running generation
-      const runningGeneration = this.#generations.find(
-        (g) => g.status === "generating" || g.status === "playing",
-      );
+    // If there are remaining generation events to process, wait
+    if (this.#isQueueBusy()) return console.log("😡 QUEUE WAS BUSY");
 
-      if (runningGeneration) {
-        // DO NOTHING FOR NOW
-        // - If the running generation is about to end, start the next one
-        // - If smooth interruption is requested, sync both generations for a smooth transition
-        //   - If not possible interrupt abruptly
-      }
+    // If that was a continue operation, request resources
+    if (event.type === "agent.continue") {
+      const requestId = this.#core.emit({ type: "agent.resources-request" });
+      this.#generationsResourcesRequestsIds[generation.id] = requestId;
+    }
 
-      // Or if there is no running generation, start the generation immediately
-      else {
-        const resourceRequestId = this.#generationsResourcesRequestsIds[generation.id];
-        if (!this.#core.context.status.thinking) {
-          this.#core.emit({ type: "agent.thinking-start", urgent: true });
-          this.#core.context.status.thinking = true;
-        }
-        generation.start(
-          resourceRequestId ? this.#resourcesResponses[resourceRequestId] : undefined,
-        );
-        generation.onGenerationEnd(() => {
-          this.#core.emit({ type: "agent.thinking-end", urgent: true });
-          this.#core.context.status.thinking = false;
-        });
-        this.#consumeQueue.push(generation);
-      }
+    // If the generation has continue but no resources yet, wait
+    if (
+      generation.params.needContinue &&
+      !((this.#generationsResourcesRequestsIds[generation.id] ?? "") in this.#resourcesResponses)
+    )
+      return;
+
+    // Find any currently running generation
+    const runningGeneration = this.#generations.find((g) => g.status !== "idle");
+
+    if (runningGeneration) {
+      // DO NOTHING FOR NOW
+      // if g.status === "ended" -> g.queue.length() is equal to remaining chunks to stream
+      // - If the running generation is about to end, start the next one
+      // - If smooth interruption is requested, sync both generations for a smooth transition
+      //   - If not possible interrupt abruptly
+    }
+
+    // Or if there is no running generation, start the generation immediately
+    else {
+      const resourceRequestId = this.#generationsResourcesRequestsIds[generation.id];
+      generation.start(resourceRequestId ? this.#resourcesResponses[resourceRequestId] : undefined);
+      this.#generationsQueue.push(generation);
     }
   }
 
@@ -123,9 +126,12 @@ export class GenerationOrchestrator {
     // Try interrupting all generations
     for (const generation of this.#generations) {
       if (generation.canBeInterrupted() || event.data.force) {
-        generation.playing();
-        generation.queue.pushFirst({ type: "end" });
-        if (generation.hasOutputted) interrupted = true;
+        // Schedule the early end of the generation
+        generation.end(true);
+
+        // If the generation was already partially or entirely consumed by the orchestrator
+        // consider that the agent was interrupted during its speech
+        if (generation.queue.totalLength() < generation.queue.length()) interrupted = true;
       }
     }
 
@@ -260,12 +266,11 @@ export class GenerationOrchestrator {
     // Note: This will have no effect if voice is disabled. Text-only chunks will be emitted immediately.
     const limiter = throttledGenerationQueue(150);
 
-    for await (const generation of this.#consumeQueue) {
+    for await (const generation of this.#generationsQueue) {
       for await (const chunk of limiter(generation.queue)) {
         // Set speaking status on first content chunk
         if (!this.#core.context.status.speaking && chunk.type === "content") {
           this.#core.emit({ type: "agent.speaking-start", urgent: true });
-          this.#core.context.status.speaking = true;
         }
 
         // Forward content chunks to core
@@ -284,16 +289,12 @@ export class GenerationOrchestrator {
 
         // Or if this is the end of the generation
         else if (chunk.type === "end") {
-          // Properly close the generation
-          generation.end();
-
           // Remove the generation from the list
           this.#generations = this.#generations.filter((g) => g.id !== generation.id);
 
           // If this is the last generation, notify the end of speaking
-          if (this.#core.context.status.speaking && this.#consumeQueue.length() === 0) {
+          if (this.#core.context.status.speaking && this.#generationsQueue.length() === 0) {
             this.#core.emit({ type: "agent.speaking-end", urgent: true });
-            this.#core.context.status.speaking = false;
           }
 
           // Move to the next generation (if any)

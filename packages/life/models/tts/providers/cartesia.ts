@@ -62,6 +62,29 @@ export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfigSchema> {
     return job;
   }
 
+  #handleWebSocketMessage(job: TTSGenerateJob, msgString: string): void {
+    // If the job has been aborted, ignore incoming messages
+    if (job.raw.abortController.signal.aborted) return;
+
+    // Parse and forward the message chunk
+    const msg = JSON.parse(msgString) as StreamingResponse;
+
+    // Handle "content" chunks
+    if (msg.type === "chunk") {
+      const buf = Buffer.from(msg.data, "base64");
+      const pcmBytes = new Int16Array(buf.buffer, buf.byteOffset, buf.length / 2);
+      job.raw.receiveChunk({ type: "content", voiceChunk: pcmBytes });
+    }
+    // Handle "end" chunks
+    else if (msg.type === "done") {
+      job.raw.receiveChunk({ type: "end" });
+    }
+    // Handle "error" chunks
+    else if (msg.type === "error") {
+      job.raw.receiveChunk({ type: "error", error: msg.error });
+    }
+  }
+
   protected async _onGeneratePushText(
     job: TTSGenerateJob,
     text: string,
@@ -85,23 +108,13 @@ export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfigSchema> {
 
     if (!this.#initializedJobsIds.includes(job.id)) {
       this.#initializedJobsIds.push(job.id);
-      (await response).on("message", (msgString: string) => {
-        // If the job has been aborted, ignore incoming messages
-        if (job.raw.abortController.signal.aborted) return;
-
-        // Else parse and forward the message chunk
-        const msg = JSON.parse(msgString) as StreamingResponse;
-        // Handle "content" chunks
-        if (msg.type === "chunk") {
-          const buf = Buffer.from(msg.data, "base64");
-          const pcmBytes = new Int16Array(buf.buffer, buf.byteOffset, buf.length / 2);
-          job.raw.receiveChunk({ type: "content", voiceChunk: pcmBytes });
-        }
-        // Handle "end"chunks
-        else if (msg.type === "done") job.raw.receiveChunk({ type: "end" });
-        // Handle "error" chunks
-        else if (msg.type === "error") job.raw.receiveChunk({ type: "error", error: msg.error });
-      });
+      response
+        .then((ws) => {
+          ws.on("message", (msgString: string) => this.#handleWebSocketMessage(job, msgString));
+        })
+        .catch((error) => {
+          job.raw.receiveChunk({ type: "error", error: error.message });
+        });
     }
   }
 }

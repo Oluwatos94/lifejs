@@ -228,11 +228,12 @@ export const corePlugin = definePlugin("core")
     }
     // Handle agent tool requests
     else if (event.type === "agent.tool-requests") {
-      let lastAgentMessageId = history.findLastMessageOfRole("agent")?.id;
-      if (!lastAgentMessageId) {
-        lastAgentMessageId = history.createMessage({ role: "agent", content: "" });
+      const lastSubjectMessage = history.findLastMessageOfRole(["user", "agent"]);
+      if (lastSubjectMessage?.role === "agent") {
+        history.addToolRequestsToAgentMessage(lastSubjectMessage.id, event.data);
+      } else {
+        history.createMessage({ role: "agent", content: "", toolsRequests: event.data });
       }
-      history.addToolRequestsToAgentMessage(lastAgentMessageId, event.data);
     }
     // Handle agent tool responses
     else if (event.type === "agent.tool-response") {

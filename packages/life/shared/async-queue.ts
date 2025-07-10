@@ -2,16 +2,19 @@ export class AsyncQueue<T> implements AsyncIterator<T>, AsyncIterable<T> {
   #buf: T[] = [];
   #wakeUp?: () => void;
   #closed = false;
+  #totalLength = 0;
 
   push(v: T) {
     if (this.#closed) return;
     this.#buf.push(v);
+    this.#totalLength++;
     this.#wakeUp?.();
   }
 
   pushFirst(v: T) {
     if (this.#closed) return;
     this.#buf.unshift(v);
+    this.#totalLength++;
     this.#wakeUp?.();
   }
 
@@ -27,6 +30,10 @@ export class AsyncQueue<T> implements AsyncIterator<T>, AsyncIterable<T> {
 
   length() {
     return this.#buf.length;
+  }
+
+  totalLength() {
+    return this.#totalLength;
   }
 
   async next(): Promise<IteratorResult<T>> {

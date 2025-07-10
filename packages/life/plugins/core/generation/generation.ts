@@ -11,38 +11,45 @@ export type GenerationChunk =
   | { type: "tool-requests"; requests: ToolRequests }
   | { type: "end" };
 
+export type GenerationStatus = "idle" | "started" | "ended";
+
+export type GenerationParams = {
+  prefix?: string;
+  needContinue?: boolean;
+  preventInterruption?: boolean;
+};
+
 export class Generation {
   id = newId("generation");
   queue: AsyncQueue<GenerationChunk> = new AsyncQueue();
-  status: "idle" | "generating" | "playing" | "ended" = "idle";
-
-  prefix = "";
-  needContinue = false;
-  preventInterruption = false;
-
-  // Track whether this generation has already output some chunks
-  hasOutputted = false;
+  status: GenerationStatus = "idle";
+  params: GenerationParams = { prefix: "", needContinue: false, preventInterruption: false };
 
   #agent: Agent;
   #voiceEnabled: boolean;
-
   #llmJob: LLMGenerateMessageJob | null = null;
   #ttsJob: TTSGenerateJob | null = null;
   #toolRequests: ToolRequests | null = null;
 
-  #onGenerationEndCallbacks: (() => void)[] = [];
+  #statusChangeCallbacks: ((status: GenerationStatus) => void)[] = [];
 
   constructor(params: { agent: Agent; voiceEnabled: boolean }) {
     this.#agent = params.agent;
     this.#voiceEnabled = params.voiceEnabled;
   }
 
+  onStatusChange(callback: () => void) {
+    this.#statusChangeCallbacks.push(callback);
+  }
+
   canBeInterrupted() {
-    return !this.preventInterruption && (this.status === "generating" || this.status === "playing");
+    return (
+      !this.params.preventInterruption && (this.status === "started" || this.queue.length() > 0)
+    );
   }
 
   canStart() {
-    return this.status === "idle" && (this.prefix || this.needContinue);
+    return this.status === "idle" && (this.params.prefix || this.params.needContinue);
   }
 
   addInsertEvent(event: Extract<CoreEvent, { type: "agent.continue" | "agent.say" }>) {
@@ -51,10 +58,10 @@ export class Generation {
       throw new Error("Cannot add continue/say operation when not idle or waiting.");
 
     // Set the continue, prefix, and interruptions attributes
-    if (event.type === "agent.continue") this.needContinue = true;
-    else if (event.type === "agent.say") this.prefix += event.data.text;
-    if (!this.preventInterruption)
-      this.preventInterruption = event.data.preventInterruption ?? false;
+    if (event.type === "agent.continue") this.params.needContinue = true;
+    else if (event.type === "agent.say") this.params.prefix += event.data.text;
+    if (!this.params.preventInterruption)
+      this.params.preventInterruption = event.data.preventInterruption ?? false;
   }
 
   async start(resources?: Resources) {
@@ -62,7 +69,7 @@ export class Generation {
     if (this.status !== "idle") throw new Error("Cannot start generation when not idle.");
 
     // Set status to running
-    this.status = "generating";
+    this.status = "started";
 
     // Start generations jobs
     if (this.#voiceEnabled) {
@@ -70,6 +77,9 @@ export class Generation {
       this.#startTTS();
     }
     this.#startLLM(resources);
+
+    // Call the start callbacks
+    for (const callback of this.#statusChangeCallbacks) callback("started");
   }
 
   async #startTTS() {
@@ -87,24 +97,23 @@ export class Generation {
         if (this.#toolRequests) {
           this.queue.push({ type: "tool-requests", requests: this.#toolRequests });
         }
-        this.playing();
+        this.end();
         break;
       } else if (chunk.type === "error") console.error("TTS error", chunk);
-      this.hasOutputted = true;
     }
   }
 
   async #startLLM(resources?: Resources) {
     // If a transcribe prefix is provided, push it to the TTS job
-    if (this.prefix) {
-      if (this.#voiceEnabled) this.#ttsJob?.pushText(this.prefix);
-      else this.queue.push({ type: "content", textChunk: this.prefix });
+    if (this.params.prefix) {
+      if (this.#voiceEnabled) this.#ttsJob?.pushText(this.params.prefix);
+      else this.queue.push({ type: "content", textChunk: this.params.prefix });
     }
 
     // If doesn't need to continue, end generation
-    if (!this.needContinue) {
+    if (!this.params.needContinue) {
       if (this.#voiceEnabled) this.#ttsJob?.pushText("", true);
-      else this.playing();
+      else this.end();
       return;
     }
 
@@ -117,8 +126,10 @@ export class Generation {
     // Forward stream chunks to TTS
     let hasContent = false;
     for await (const chunk of this.#llmJob.getStream()) {
+      // Handle error chunks
+      if (chunk.type === "error") console.error("LLM error", chunk);
       // If voice is enabled, forward chunks to TTS job
-      if (this.#voiceEnabled) {
+      else if (this.#voiceEnabled) {
         // - Content
         if (chunk.type === "content") {
           this.#ttsJob?.pushText(chunk.content);
@@ -128,7 +139,6 @@ export class Generation {
         else if (chunk.type === "tools") {
           if (hasContent) this.#toolRequests = chunk.tools;
           else {
-            this.hasOutputted = true;
             this.queue.push({ type: "tool-requests", requests: chunk.tools });
             break;
           }
@@ -139,7 +149,8 @@ export class Generation {
           break;
         }
       }
-      // Else, push chunks directly to the queue
+      // Else if text-only is required, push chunks directly to the queue
+      // biome-ignore lint/style/useCollapsedElseIf: <explanation>
       else {
         // - Content
         if (chunk.type === "content")
@@ -147,31 +158,20 @@ export class Generation {
         // - Tools
         else if (chunk.type === "tools") {
           this.queue.push({ type: "tool-requests", requests: chunk.tools });
-          this.playing();
+          this.end();
           break;
         }
         // - End
         else if (chunk.type === "end") {
-          this.playing();
+          this.end();
           break;
         }
-        this.hasOutputted = true;
       }
     }
   }
 
-  onGenerationEnd(callback: () => void) {
-    this.#onGenerationEndCallbacks.push(callback);
-  }
-
-  playing() {
-    this.status = "playing";
-    this.queue.push({ type: "end" });
-    for (const callback of this.#onGenerationEndCallbacks) callback();
-  }
-
   // Called by the orchestrator when end chunks are consumed
-  end() {
+  end(early = false) {
     // Cancel any ongoing LLM job
     if (this.#llmJob) this.#llmJob.cancel();
 
@@ -179,6 +179,13 @@ export class Generation {
     if (this.#ttsJob) this.#ttsJob.cancel();
 
     // Push an end chunk and update status
+    if (early) this.queue.pushFirst({ type: "end" });
+    else this.queue.push({ type: "end" });
+
+    // Push an end chunk and update status
     this.status = "ended";
+
+    // Call the end callbacks
+    for (const callback of this.#statusChangeCallbacks) callback("ended");
   }
 }
