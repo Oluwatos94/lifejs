@@ -25,13 +25,17 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     event: PluginEvent<PluginEventsDef, "output">;
     context: Readonly<PluginContext>;
   }>[] = [];
+  #externalInterceptors: {
+    name: string;
+    interceptor: (event: PluginEvent<Definition["events"], "output">) => void;
+  }[] = [];
 
   constructor(agent: Agent, def: Definition, config: PluginConfig<Definition["config"], "output">) {
     this.#agent = agent;
     this.#definition = def;
     this.#config = config;
-    for (const [methodName, rawMethod] of Object.entries(this.#definition.methods ?? {})) {
-      const method = rawMethod.bind(this, {
+    for (const [methodName, methodDef] of Object.entries(this.#definition.methods ?? {})) {
+      const method = methodDef.run.bind(this, {
         agent: this.#agent,
         config: this.#config,
         context: this.#definition.context,
@@ -85,6 +89,13 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     return id;
   }
 
+  registerInterceptor(
+    name: string,
+    interceptor: (event: PluginEvent<Definition["events"], "output">) => void,
+  ) {
+    this.#externalInterceptors.push({ name, interceptor });
+  }
+
   async start() {
     for await (const event of this.#queue) {
       // if (
@@ -93,7 +104,10 @@ export class PluginRunner<const Definition extends PluginDefinition> {
       //   event.type !== "agent.voice-chunk"
       // )
       //   console.log("🐳", event);
-      // 1. Run effects
+      // 1. Feed other plugins' interceptors
+      // const result;
+
+      // 2. Run effects
       for (const effect of Object.values(this.#definition.effects ?? {})) {
         await effect({
           agent: this.#agent,

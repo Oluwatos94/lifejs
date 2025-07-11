@@ -1,29 +1,54 @@
-import { type Message, messageSchema, toolSchema } from "@/agent/resources";
+import { type CreateMessageInput, type Message, resourcesSchema } from "@/agent/resources";
 import { definePlugin } from "@/plugins/definition";
 import { z } from "zod";
+import { MemoryDefinitionBuilder } from "./definition";
 
-interface Memory {
-  id: string;
-}
-
-const memoriesPlugin = definePlugin("memories")
-  .context({
-    lastResults: new Map<string, Message[]>(),
-  })
-  .addInterceptor(
-    "intercept-core-resources-requests",
-    {
-      dependencyName: "core",
-      dependencyEvents: {
+export const memoriesPlugin = definePlugin("memories")
+  .dependencies({
+    core: {
+      methods: {
+        createMessage: z.function().args(z.custom<CreateMessageInput>()).returns(z.string()),
+      },
+      events: {
         "agent.resources-response": {
-          dataSchema: z.object({
-            history: z.array(messageSchema),
-            tools: z.array(toolSchema),
-          }),
+          dataSchema: resourcesSchema.extend({ requestId: z.string() }),
         },
       },
     },
-    ({ event }) => {
-      if (event.type !== "agent.resources-response") return;
+  })
+  .config(
+    z.object({
+      items: z.array(z.instanceof(MemoryDefinitionBuilder)).default([]),
+    }),
+  )
+  .context({
+    lastResults: new Map<string, Message[]>(),
+  })
+  .addEffect("update-last-results", ({ event, context, dependencies }) => {
+    dependencies.core.methods.createMessage({
+      role: "user",
+      content: "Hello, world!",
+    });
+  })
+  .addInterceptor(
+    "intercept-core-resources-response",
+    ({ dependencyName, event, next, config }) => {
+      if (dependencyName !== "core" && event.type !== "agent.resources-response") return;
+
+      // Build memories messages
+      const memoriesMessages = config.items.flatMap((item) => {
+        const getOutput = item._definition().getOutput;
+        if (typeof getOutput === "function") return getOutput();
+        return getOutput ?? [];
+      });
+
+      // Override the resources response with the messages produced by the memories
+      next({
+        ...event,
+        data: {
+          ...event.data,
+          messages: memoriesMessages,
+        },
+      });
     },
   );

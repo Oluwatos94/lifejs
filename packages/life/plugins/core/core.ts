@@ -1,8 +1,6 @@
 import { History } from "@/agent/history";
 import {
-  type CreateMessageInput,
   type Message,
-  type UpdateMessageInput,
   createMessageInputSchema,
   messageSchema,
   resourcesSchema,
@@ -159,25 +157,64 @@ export const corePlugin = definePlugin("core")
     "agent.thinking-end": {}, // end of generation
   })
   .methods({
-    createMessage: ({ emit }, message: CreateMessageInput) =>
-      emit({ type: "messages.create", data: message, urgent: true }),
-    updateMessage: ({ emit }, message: UpdateMessageInput) =>
-      emit({ type: "messages.update", data: message, urgent: true }),
-    continue: (
-      { emit },
-      params: Extract<Parameters<typeof emit>[0], { type: "agent.continue" }>["data"],
-    ) => emit({ type: "agent.continue", data: params, urgent: true }),
-    decide: (
-      { emit },
-      params: Extract<Parameters<typeof emit>[0], { type: "agent.decide" }>["data"],
-    ) => emit({ type: "agent.decide", data: params, urgent: true }),
-    say: ({ emit }, params: Extract<Parameters<typeof emit>[0], { type: "agent.say" }>["data"]) =>
-      emit({ type: "agent.say", data: params, urgent: true }),
-    interrupt: (
-      { emit },
-      params: Extract<Parameters<typeof emit>[0], { type: "agent.interrupt" }>["data"],
-    ) => {
-      emit({ type: "agent.interrupt", data: params, urgent: true });
+    createMessage: {
+      schema: z.function().args(createMessageInputSchema).returns(z.string()),
+      run: ({ emit }, message) => emit({ type: "messages.create", data: message, urgent: true }),
+    },
+    updateMessage: {
+      schema: z.function().args(updateMessageInputSchema).returns(z.string()),
+      run: ({ emit }, message) => emit({ type: "messages.update", data: message, urgent: true }),
+    },
+    continue: {
+      schema: z
+        .function()
+        .args(
+          z.object({
+            interrupt: z.enum(["abrupt", "smooth"]).or(z.literal(false)).optional(),
+            preventInterruption: z.boolean().optional(),
+          }),
+        )
+        .returns(z.string()),
+      run: ({ emit }, params) => emit({ type: "agent.continue", data: params, urgent: true }),
+    },
+    decide: {
+      schema: z
+        .function()
+        .args(
+          z.object({
+            messages: z.array(messageSchema),
+            interrupt: z.enum(["abrupt", "smooth"]).or(z.literal(false)).optional(),
+            preventInterruption: z.boolean().optional(),
+          }),
+        )
+        .returns(z.string()),
+      run: ({ emit }, params) => emit({ type: "agent.decide", data: params, urgent: true }),
+    },
+    say: {
+      schema: z
+        .function()
+        .args(
+          z.object({
+            text: z.string(),
+            interrupt: z.enum(["abrupt", "smooth"]).or(z.literal(false)).optional(),
+            preventInterruption: z.boolean().optional(),
+          }),
+        )
+        .returns(z.string()),
+      run: ({ emit }, params) => emit({ type: "agent.say", data: params, urgent: true }),
+    },
+    interrupt: {
+      schema: z
+        .function()
+        .args(
+          z.object({
+            reason: z.string(),
+            author: z.enum(["user", "application"]),
+            force: z.boolean().optional(),
+          }),
+        )
+        .returns(z.string()),
+      run: ({ emit }, params) => emit({ type: "agent.interrupt", data: params, urgent: true }),
     },
   })
   // 1. Handle agent' status changes

@@ -9,65 +9,29 @@ depth by replacing many nested types with 'any' (not the top-level ones though, 
 typesafe experience).
 */
 
+// Type alias for any Zod function schema - more readable than z.ZodFunction<any, any>
+// biome-ignore lint/suspicious/noExplicitAny: Required for flexible function type matching
+type AnyZodFunction = z.ZodFunction<any, any>;
+
 // - Common
 export type EmitFunction<EventsDef extends PluginEventsDef = PluginEventsDef> = (
   event: PluginEvent<EventsDef, "input">,
 ) => string;
 
 // - Dependencies
-export type PluginDependency<
-  Methods extends PluginMethods<
-    PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-    PluginConfigDef,
-    PluginContext,
-    PluginEventsDef
-  >,
-> = {
-  _definition: { name: string; methods: Methods };
+export type PluginDependencyDefinition = {
+  events: PluginEventsDef;
+  methods: Record<string, AnyZodFunction>;
 };
-export type PluginDependencies<
-  Dependencies extends PluginDependency<
-    PluginMethods<
-      PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-      PluginConfigDef,
-      PluginContext,
-      PluginEventsDef
-    >
-  >[],
-> = {
-  [K in Dependencies[number] as K["_definition"]["name"]]: {
-    methods: PluginMethods<
-      K["_definition"]["methods"],
-      PluginConfigDef,
-      PluginContext,
-      PluginEventsDef
-    >;
+export type PluginDependenciesDef = Record<string, PluginDependencyDefinition>;
+export type PluginDependencies<Defs extends PluginDependenciesDef> = {
+  [K in keyof Defs]: {
+    events: Defs[K]["events"];
+    methods: {
+      [M in keyof Defs[K]["methods"]]: z.infer<Defs[K]["methods"][M]>;
+    };
   };
 };
-// Helper type to extract dependency names safely
-type ExtractDependencyNames<
-  Dependencies extends PluginDependency<
-    PluginMethods<
-      PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-      PluginConfigDef,
-      PluginContext,
-      PluginEventsDef
-    >
-  >[],
-> = Dependencies extends readonly []
-  ? []
-  : {
-      [K in keyof Dependencies]: Dependencies[K] extends PluginDependency<
-        PluginMethods<
-          PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-          PluginConfigDef,
-          PluginContext,
-          PluginEventsDef
-        >
-      >
-        ? Dependencies[K]["_definition"]["name"]
-        : never;
-    };
 
 // - Config
 export type PluginConfigDef = z.AnyZodObject;
@@ -97,13 +61,7 @@ export type PluginContext = Record<string, ContextValue>;
 
 // - Events
 export type PluginEventDataSchema = z.Schema;
-export type PluginEventsDef = Record<
-  string,
-  {
-    dataSchema?: PluginEventDataSchema;
-    interceptorsPermissions?: "drop" | "alter" | "all" | "none";
-  }
->;
+export type PluginEventsDef = Record<string, { dataSchema?: PluginEventDataSchema }>;
 export type PluginEvent<EventsDef extends PluginEventsDef, T extends "input" | "output"> = {
   [K in keyof EventsDef]: {
     type: K extends string ? K : never;
@@ -123,35 +81,28 @@ export type PluginEvent<EventsDef extends PluginEventsDef, T extends "input" | "
 }[keyof EventsDef];
 
 // - Methods
-export type PluginMethodsDef<
-  ConfigDef extends PluginConfigDef,
-  Context extends PluginContext,
-  EventsDef extends PluginEventsDef,
-> = Record<
+// Type for method schemas definition (the new format with schema + run)
+export type PluginMethodsDef = Record<
   string,
-  (
-    params: {
-      agent: Agent;
-      config: PluginConfig<ConfigDef, "output">;
-      context: Readonly<Context>;
-      emit: EmitFunction<EventsDef>;
-    },
-    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-    ...args: any[]
-  ) => unknown | Promise<unknown>
+  // biome-ignore lint/suspicious/noExplicitAny: Required for flexible function signatures
+  { schema: AnyZodFunction; run: (...args: any[]) => any }
 >;
-// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-type RemoveFirstParam<T> = T extends (first: any, ...rest: infer R) => infer Return
-  ? (...args: R) => Return
-  : T;
-export type PluginMethods<
-  MethodsConfigs extends PluginMethodsDef<ConfigDef, Context, EventsDef>,
-  ConfigDef extends PluginConfigDef,
-  Context extends PluginContext,
-  EventsDef extends PluginEventsDef,
-> = {
-  [K in keyof MethodsConfigs]: RemoveFirstParam<MethodsConfigs[K]>;
-};
+
+// Type to extract methods from method definitions
+export type PluginMethods<MethodsDef extends PluginMethodsDef | undefined> =
+  MethodsDef extends PluginMethodsDef
+    ? {
+        [K in keyof MethodsDef]: MethodsDef[K]["schema"] extends z.ZodFunction<
+          infer TArgs,
+          infer TReturns
+        >
+          ? (
+              ...args: z.infer<TArgs> extends readonly unknown[] ? z.infer<TArgs> : never
+            ) => z.infer<TReturns> | Promise<z.infer<TReturns>>
+          : never;
+      }
+    : // biome-ignore lint/complexity/noBannedTypes: <explanation>
+      {};
 
 // - Lifecycle
 export type PluginLifecycle<ConfigDef extends PluginConfigDef, Context extends PluginContext> = {
@@ -162,56 +113,28 @@ export type PluginLifecycle<ConfigDef extends PluginConfigDef, Context extends P
 
 // - Effects
 export type PluginEffectFunction<
+  DependenciesDef extends PluginDependenciesDef,
   EventsDef extends PluginEventsDef,
   ConfigDef extends PluginConfigDef,
   Context extends PluginContext,
-  Methods extends PluginMethods<
-    PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-    PluginConfigDef,
-    PluginContext,
-    PluginEventsDef
-  >,
-  Dependencies extends PluginDependencies<
-    PluginDependency<
-      PluginMethods<
-        PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-        PluginConfigDef,
-        PluginContext,
-        PluginEventsDef
-      >
-    >[]
-  >,
+  MethodsDef extends PluginMethodsDef | undefined,
 > = (params: {
   event: PluginEvent<EventsDef, "output">;
   agent: Agent;
   config: PluginConfig<ConfigDef, "output">;
   context: Context;
-  methods: Methods;
-  dependencies: Dependencies;
+  methods: PluginMethods<MethodsDef>;
+  dependencies: PluginDependencies<DependenciesDef>;
   emit: EmitFunction<EventsDef>;
 }) => void | Promise<void>;
 
 // - Services
 export type PluginServiceFunction<
+  DependenciesDef extends PluginDependenciesDef,
   EventsDef extends PluginEventsDef,
   ConfigDef extends PluginConfigDef,
   Context extends PluginContext,
-  Methods extends PluginMethods<
-    PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-    PluginConfigDef,
-    PluginContext,
-    PluginEventsDef
-  >,
-  Dependencies extends PluginDependencies<
-    PluginDependency<
-      PluginMethods<
-        PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-        PluginConfigDef,
-        PluginContext,
-        PluginEventsDef
-      >
-    >[]
-  >,
+  MethodsDef extends PluginMethodsDef | undefined,
 > = (params: {
   queue: AsyncQueue<{
     event: PluginEvent<EventsDef, "output">;
@@ -219,84 +142,54 @@ export type PluginServiceFunction<
   }>;
   agent: Agent;
   config: PluginConfig<ConfigDef, "output">;
-  methods: Methods;
-  dependencies: Dependencies;
+  methods: PluginMethods<MethodsDef>;
+  dependencies: PluginDependencies<DependenciesDef>;
   emit: EmitFunction<EventsDef>;
 }) => void | Promise<void>;
 
 // - Interceptors
 export type PluginInterceptorFunction<
-  EventsDef extends PluginEventsDef,
+  DependenciesDef extends PluginDependenciesDef,
   ConfigDef extends PluginConfigDef,
 > = (params: {
-  event: PluginEvent<EventsDef, "output">;
+  dependencyName: keyof DependenciesDef;
+  event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">;
   config: PluginConfig<ConfigDef, "output">;
   drop: (reason: string) => void;
-  next: (event: PluginEvent<EventsDef, "input">) => void;
-  emit: EmitFunction<EventsDef>;
+  next: (event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "input">) => void;
+  emit: EmitFunction<DependenciesDef[keyof DependenciesDef]["events"]>;
 }) => void | Promise<void>;
-type RemoveInterceptorsPermissions<T extends Record<string, unknown>> = {
-  [K in keyof T]: Omit<T[K], "interceptorsPermissions">;
-};
-export interface PluginInterceptorDependency {
-  dependencyName: string;
-  dependencyEvents: RemoveInterceptorsPermissions<PluginEventsDef>;
-}
 
 // - Definition
 export interface PluginDefinition {
   readonly name: string;
-  dependenciesNames: string[];
+  dependencies: PluginDependenciesDef;
   config: PluginConfigDef;
   context: PluginContext;
   events: PluginEventsDef;
-  methods: PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>;
+  methods: PluginMethodsDef;
   lifecycle: PluginLifecycle<PluginConfigDef, PluginContext>;
   effects: Record<
     string,
     PluginEffectFunction<
+      PluginDependenciesDef,
       PluginEventsDef,
       PluginConfigDef,
       PluginContext,
-      PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-      PluginDependencies<
-        PluginDependency<
-          PluginMethods<
-            PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-            PluginConfigDef,
-            PluginContext,
-            PluginEventsDef
-          >
-        >[]
-      >
+      PluginMethodsDef | undefined
     >
   >;
   services: Record<
     string,
     PluginServiceFunction<
+      PluginDependenciesDef,
       PluginEventsDef,
       PluginConfigDef,
       PluginContext,
-      PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-      PluginDependencies<
-        PluginDependency<
-          PluginMethods<
-            PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-            PluginConfigDef,
-            PluginContext,
-            PluginEventsDef
-          >
-        >[]
-      >
+      PluginMethodsDef | undefined
     >
   >;
-  interceptors: Record<
-    string,
-    {
-      dependencyName: string;
-      interceptor: PluginInterceptorFunction<PluginEventsDef, PluginConfigDef>;
-    }
-  >;
+  interceptors: Record<string, PluginInterceptorFunction<PluginDependenciesDef, PluginConfigDef>>;
 }
 
 // - Plugin
@@ -305,14 +198,6 @@ export class PluginDefinitionBuilder<
   EffectKeys extends string = never,
   ServiceKeys extends string = never,
   InterceptorKeys extends string = never,
-  Dependencies extends PluginDependency<
-    PluginMethods<
-      PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-      PluginConfigDef,
-      PluginContext,
-      PluginEventsDef
-    >
-  >[] = [],
   ExcludedMethods extends string = never,
 > {
   _definition: Definition;
@@ -321,27 +206,15 @@ export class PluginDefinitionBuilder<
     this._definition = def;
   }
 
-  dependencies<
-    const NewDependencies extends PluginDependency<
-      PluginMethods<
-        PluginMethodsDef<PluginConfigDef, PluginContext, PluginEventsDef>,
-        PluginConfigDef,
-        PluginContext,
-        PluginEventsDef
-      >
-    >[],
-  >(dependencies: NewDependencies) {
+  dependencies<const NewDependencies extends PluginDependenciesDef>(dependencies: NewDependencies) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
-      dependenciesNames: dependencies.map((d) => d._definition.name),
+      dependencies: dependencies,
     }) as PluginDefinitionBuilder<
-      Definition & {
-        dependenciesNames: ExtractDependencyNames<NewDependencies>;
-      },
+      Definition & { dependencies: NewDependencies },
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,
-      NewDependencies,
       ExcludedMethods | "dependencies"
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods | "dependencies">;
@@ -356,7 +229,6 @@ export class PluginDefinitionBuilder<
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,
-      Dependencies,
       ExcludedMethods | "config"
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods | "config">;
@@ -371,7 +243,6 @@ export class PluginDefinitionBuilder<
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,
-      Dependencies,
       ExcludedMethods | "context"
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods | "context">;
@@ -386,28 +257,44 @@ export class PluginDefinitionBuilder<
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,
-      Dependencies,
       ExcludedMethods | "events"
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods | "events">;
   }
 
   methods<
-    const MethodsDef extends PluginMethodsDef<
-      Definition["config"],
-      Definition["context"],
-      Definition["events"]
-    >,
-  >(methods: MethodsDef) {
+    // biome-ignore lint/suspicious/noExplicitAny: Generic constraint requires any for flexible function type inference
+    const Schemas extends Record<string, AnyZodFunction>,
+  >(
+    schemasAndImplementations: {
+      [K in keyof Schemas]: {
+        schema: Schemas[K];
+        run: Schemas[K] extends z.ZodFunction<infer TArgs, infer TReturns>
+          ? (
+              params: {
+                agent: Agent;
+                config: PluginConfig<Definition["config"], "output">;
+                context: Readonly<Definition["context"]>;
+                emit: EmitFunction<Definition["events"]>;
+              },
+              ...args: z.infer<TArgs> extends readonly unknown[] ? z.infer<TArgs> : never
+            ) => z.infer<TReturns> | Promise<z.infer<TReturns>>
+          : never;
+      };
+    },
+  ) {
+    // Keep the original format and let the builder handle the conversion
+    const methodsWithSchemas = schemasAndImplementations;
+
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
-      methods,
+      // Store the full method definitions including schemas
+      methods: methodsWithSchemas,
     }) as PluginDefinitionBuilder<
-      Definition & { methods: MethodsDef },
+      Definition & { methods: typeof methodsWithSchemas },
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,
-      Dependencies,
       ExcludedMethods | "methods"
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods | "methods">;
@@ -424,7 +311,6 @@ export class PluginDefinitionBuilder<
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,
-      Dependencies,
       ExcludedMethods | "lifecycle"
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods | "lifecycle">;
@@ -433,11 +319,11 @@ export class PluginDefinitionBuilder<
   addEffect<const Name extends string>(
     name: Name,
     effect: PluginEffectFunction<
+      Definition["dependencies"],
       Definition["events"],
       Definition["config"],
       Definition["context"],
-      PluginMethods<Definition["methods"], PluginConfigDef, PluginContext, PluginEventsDef>,
-      PluginDependencies<Dependencies>
+      Definition["methods"]
     >,
   ) {
     const plugin = new PluginDefinitionBuilder({
@@ -448,7 +334,6 @@ export class PluginDefinitionBuilder<
       EffectKeys | Name,
       ServiceKeys,
       InterceptorKeys,
-      Dependencies,
       ExcludedMethods
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods>;
@@ -464,7 +349,6 @@ export class PluginDefinitionBuilder<
       Exclude<EffectKeys, Name>,
       ServiceKeys,
       InterceptorKeys,
-      Dependencies,
       ExcludedMethods
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods>;
@@ -473,11 +357,11 @@ export class PluginDefinitionBuilder<
   addService<const Name extends string>(
     name: Name,
     service: PluginServiceFunction<
+      Definition["dependencies"],
       Definition["events"],
       Definition["config"],
       Definition["context"],
-      PluginMethods<Definition["methods"], PluginConfigDef, PluginContext, PluginEventsDef>,
-      PluginDependencies<Dependencies>
+      Definition["methods"]
     >,
   ) {
     const plugin = new PluginDefinitionBuilder({
@@ -488,7 +372,6 @@ export class PluginDefinitionBuilder<
       EffectKeys,
       ServiceKeys | Name,
       InterceptorKeys,
-      Dependencies,
       ExcludedMethods
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods>;
@@ -504,29 +387,23 @@ export class PluginDefinitionBuilder<
       EffectKeys,
       Exclude<ServiceKeys, Name>,
       InterceptorKeys,
-      Dependencies,
       ExcludedMethods
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods>;
   }
 
-  addInterceptor<const Name extends string, const Dependency extends PluginInterceptorDependency>(
+  addInterceptor<const Name extends string>(
     name: Name,
-    dependency: Dependency,
-    interceptor: PluginInterceptorFunction<Dependency["dependencyEvents"], Definition["config"]>,
+    interceptor: PluginInterceptorFunction<Definition["dependencies"], Definition["config"]>,
   ) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
-      interceptors: {
-        ...(this._definition.interceptors ?? {}),
-        [name]: { ...dependency, interceptor },
-      },
+      interceptors: { ...(this._definition.interceptors ?? {}), [name]: interceptor },
     }) as PluginDefinitionBuilder<
       Definition,
       EffectKeys,
       ServiceKeys,
       InterceptorKeys | Name,
-      Dependencies,
       ExcludedMethods
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods>;
@@ -542,7 +419,6 @@ export class PluginDefinitionBuilder<
       EffectKeys,
       ServiceKeys,
       Exclude<InterceptorKeys, Name>,
-      Dependencies,
       ExcludedMethods
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods>;
@@ -552,7 +428,7 @@ export class PluginDefinitionBuilder<
 export function definePlugin<const Name extends string>(name: Name) {
   return new PluginDefinitionBuilder({
     name: name,
-    dependenciesNames: [],
+    dependencies: {},
     config: z.object({}),
     context: {},
     events: {},
@@ -563,3 +439,32 @@ export function definePlugin<const Name extends string>(name: Name) {
     services: {},
   });
 }
+
+// Test the new method definition pattern
+const _testPlugin = definePlugin("test")
+  .events({
+    test: { dataSchema: z.object({ data: z.string() }) },
+  })
+  .methods({
+    sayHello: {
+      schema: z.function().args(z.string()).returns(z.string()),
+      run: ({ emit }, name) => {
+        // TypeScript should know that 'name' is string
+        emit({ type: "test", data: { data: name } });
+        return `Hello ${name}`;
+      },
+    },
+    calculate: {
+      schema: z.function().args(z.number(), z.number()).returns(z.number()),
+      run: (_params, x, y) => {
+        // TypeScript should know x and y are numbers
+        return x + y;
+      },
+    },
+    noArgs: {
+      schema: z.function().args().returns(z.void()),
+      run: ({ emit }) => {
+        emit({ type: "test", data: { data: "no args" } });
+      },
+    },
+  });

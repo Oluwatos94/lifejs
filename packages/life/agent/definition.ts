@@ -2,87 +2,98 @@ import { type ConfigDefinition, defineConfig } from "@/config";
 import type { PluginConfig, PluginDefinition, PluginDefinitionBuilder } from "@/plugins/definition";
 import type { z } from "zod";
 
-export type AgentDefinition<T extends "input" | "output"> = {
+export type AgentDefinition = {
   name: string;
-  config: ConfigDefinition<T>;
+  config: ConfigDefinition<"output">;
   plugins: PluginDefinition[];
   pluginConfigs: Record<string, unknown>;
 };
 
+type WithPluginsMethods<
+  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+  Builder extends AgentDefinitionBuilder<any, any>,
+  PluginsDefs extends readonly PluginDefinition[],
+  ExcludedMethods extends string,
+> = Builder & {
+  [K in PluginsDefs[number]["name"]]: K extends string
+    ? (
+        config: PluginConfig<Extract<PluginsDefs[number], { name: K }>["config"], "input">,
+      ) => Omit<WithPluginsMethods<Builder, PluginsDefs, ExcludedMethods | K>, ExcludedMethods | K>
+    : never;
+};
+
 export class AgentDefinitionBuilder<
-  const Definition extends AgentDefinition<"input">,
+  const Definition extends AgentDefinition,
   ExcludedMethods extends string = never,
 > {
-  #_definition: Definition;
+  _definition: Definition;
 
-  constructor(def: Definition) {
-    this.#_definition = def;
-  }
-
-  _definition() {
-    return this.#_definition as unknown as AgentDefinition<"output">;
+  constructor(definition: Definition) {
+    this._definition = definition;
   }
 
   config(params: ConfigDefinition<"input">) {
-    const config = defineConfig(params);
-    const agent = new AgentDefinitionBuilder<Definition, ExcludedMethods | "config">({
-      ...this.#_definition,
-      config: config.withDefaults,
-    });
-    return agent as Omit<typeof agent, ExcludedMethods | "config">;
+    // Create a new builder instance with the provided config
+    const builder = new AgentDefinitionBuilder({
+      ...this._definition,
+      config: defineConfig(params).withDefaults,
+    }) as AgentDefinitionBuilder<Definition, ExcludedMethods | "config">;
+
+    // Return the new builder with the plugins methods, minus excluded methods
+    return this.#withPluginsMethods(builder, this._definition.plugins) as Omit<
+      WithPluginsMethods<typeof builder, Definition["plugins"], ExcludedMethods | "config">,
+      ExcludedMethods | "config"
+    >;
   }
 
   plugins<
     // biome-ignore lint/suspicious/noExplicitAny: <explanation>
     const Plugins extends readonly { _definition: PluginDefinitionBuilder<any>["_definition"] }[],
   >(plugins: Plugins) {
-    type PluginsDefs = {
-      [K in keyof Plugins]: Plugins[K]["_definition"];
-    };
-
+    // Create a new builder instance with the provided plugins
     const pluginDefs = plugins.map((p) => p._definition);
-    const agent = new AgentDefinitionBuilder({
-      ...this.#_definition,
+    const builder = new AgentDefinitionBuilder({
+      ...this._definition,
       plugins: pluginDefs,
-      pluginConfigs: {},
     }) as AgentDefinitionBuilder<
-      Definition & { plugins: PluginsDefs },
+      Omit<Definition, "plugins"> & { plugins: Plugins[number]["_definition"][] },
       ExcludedMethods | "plugins"
     >;
 
-    // Generate methods for each plugin
-    for (const plugin of plugins) {
-      Object.assign(agent, {
-        [plugin._definition.name]: this.#pluginMethod(pluginDefs, plugin._definition),
-      });
-    }
-
-    // Create typed plugin methods
-    type PluginMethodsType<A> = {
-      [K in PluginsDefs[number]["name"]]: K extends string
-        ? (
-            config: PluginConfig<Extract<PluginsDefs[number], { name: K }>["config"], "input">,
-          ) => Omit<A, ExcludedMethods | "plugins" | K>
-        : never;
-    };
-
-    // Build and return the typed agent
-    type AgentWithPluginMethods = Omit<typeof agent, ExcludedMethods | "plugins"> &
-      PluginMethodsType<typeof agent>;
-
-    return agent as typeof agent & PluginMethodsType<AgentWithPluginMethods>;
+    // Return the new builder with the plugins methods, minus excluded methods
+    return this.#withPluginsMethods(builder, pluginDefs) as Omit<
+      WithPluginsMethods<
+        typeof builder,
+        Plugins[number]["_definition"][],
+        ExcludedMethods | "plugins"
+      >,
+      ExcludedMethods | "plugins"
+    >;
   }
 
-  #pluginMethod(plugins: PluginDefinition[], plugin: PluginDefinition) {
+  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+  #withPluginsMethods<Builder extends AgentDefinitionBuilder<any, any>>(
+    builder: Builder,
+    plugins: PluginDefinition[],
+  ) {
+    for (const plugin of plugins) {
+      Object.assign(builder, {
+        [plugin.name]: this.#pluginMethod(plugin),
+      });
+    }
+    return builder;
+  }
+
+  #pluginMethod(plugin: PluginDefinition) {
     return (config: z.input<PluginDefinition["config"]>) => {
-      return new AgentDefinitionBuilder({
-        ...this.#_definition,
-        plugins,
+      const builder = new AgentDefinitionBuilder({
+        ...this._definition,
         pluginConfigs: {
-          ...((this.#_definition as Definition).pluginConfigs ?? {}),
+          ...((this._definition as Definition).pluginConfigs ?? {}),
           [plugin.name]: plugin.config.parse(config),
         },
       });
+      return builder;
     };
   }
 }
@@ -90,7 +101,7 @@ export class AgentDefinitionBuilder<
 export function defineAgent<const Name extends string>(name: Name) {
   return new AgentDefinitionBuilder({
     name,
-    config: {},
+    config: defineConfig({}).withDefaults as ConfigDefinition<"output">,
     plugins: [],
     pluginConfigs: {},
   });

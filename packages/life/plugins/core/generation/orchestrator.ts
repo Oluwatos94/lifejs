@@ -4,7 +4,7 @@ import type { EmitFunction, PluginEvent } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/prefixed-id";
 import { z } from "zod";
-import type { corePlugin } from "../plugin";
+import type { corePlugin } from "../core";
 import { Generation, type GenerationChunk } from "./generation";
 
 export type CoreEvent = PluginEvent<typeof corePlugin._definition.events, "output">;

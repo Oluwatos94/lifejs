@@ -6,10 +6,11 @@ import { type VADProvider, vadProviders } from "@/models/vad";
 import type { PluginDefinition } from "@/plugins/definition";
 import { PluginRunner } from "@/plugins/runner";
 import { type ServerTransportProvider, serverTransportProviders } from "@/transport/index.server";
+import { isSameType } from "zod-compare";
 import type { AgentDefinition } from "./definition";
 
 export class Agent {
-  definition: AgentDefinition<"output">;
+  definition: AgentDefinition;
   transport: InstanceType<ServerTransportProvider>;
   storage = null;
   models: {
@@ -21,13 +22,14 @@ export class Agent {
   };
   plugins: Record<string, PluginRunner<PluginDefinition>> = {};
 
-  constructor(definition: AgentDefinition<"output">) {
+  constructor(definition: AgentDefinition) {
     this.definition = definition;
 
     // Initialize transport
     const serverTransportProvider = serverTransportProviders[definition.config.transport.provider];
     this.transport = new serverTransportProvider.class(definition.config.transport);
     this.transport.joinRoom("room-1").then(() => {
+      // TMP: Expose say() via RPC
       this.transport.receiveObject("rpc-say", (data) => {
         // @ts-ignore
         this.plugins.core.say(data);
@@ -63,13 +65,86 @@ export class Agent {
     // if (this.plugins.collections) this.collections = this.plugins.collections;
   }
 
-  async start() {
-    for (const plugin of this.definition.plugins) {
-      const runner = new PluginRunner(
-        this,
-        plugin,
-        this.definition.pluginConfigs[plugin.name] ?? {},
+  validatePlugins() {
+    // Validate plugins have unique names
+    const pluginNames = this.definition.plugins.map((plugin) => plugin.name);
+    const duplicates = pluginNames.filter((name, index) => pluginNames.indexOf(name) !== index);
+    if (duplicates.length > 0) {
+      const uniqueDuplicates = [...new Set(duplicates)];
+      throw new Error(
+        `Two or more plugins are named "${uniqueDuplicates.join('", "')}". Plugin names must be unique. (agent: '${this.definition.name}')`,
       );
+    }
+
+    // Validate plugin dependencies
+    for (const plugin of this.definition.plugins) {
+      for (const [depName, depDef] of Object.entries(plugin.dependencies || {})) {
+        // - Ensure the plugin is provided
+        const depPlugin = this.definition.plugins.find((p) => p.name === depName);
+        if (!depPlugin) {
+          throw new Error(
+            `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this.definition.name}')`,
+          );
+        }
+
+        // - Validate that required methods exist and have the correct schema
+        for (const [methodName, expectedSchema] of Object.entries(depDef.methods || {})) {
+          // Check that the method exists
+          if (!depPlugin.methods?.[methodName]) {
+            throw new Error(
+              `Plugin "${plugin.name}" depends on method "${methodName}" from plugin "${depName}", but this method does not exist. (agent: '${this.definition.name}')`,
+            );
+          }
+
+          // Check that the method has the correct schema
+          const actualSchema = depPlugin.methods[methodName].schema;
+          if (!isSameType(expectedSchema, actualSchema)) {
+            throw new Error(
+              `Plugin "${plugin.name}" depends on method "${methodName}" from plugin "${depName}" with incompatible signature. (agent: '${this.definition.name}')`,
+            );
+          }
+        }
+
+        // - Validate required events exist and have the correct signature
+        for (const [eventType, expectedEventDef] of Object.entries(depDef.events || {})) {
+          // Check that the event exists
+          const actualEventDef = depPlugin.events?.[eventType];
+          if (!actualEventDef) {
+            throw new Error(
+              `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}", but this event does not exist. (agent: '${this.definition.name}')`,
+            );
+          }
+
+          // Compare event data schemas if expected
+          const expectedSchema = expectedEventDef.dataSchema;
+          if (expectedSchema) {
+            const actualSchema = actualEventDef.dataSchema;
+            if (!actualSchema) {
+              throw new Error(
+                `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with a data schema, but the event has no data schema. (agent: '${this.definition.name}')`,
+              );
+            }
+            if (!isSameType(expectedSchema, actualSchema)) {
+              throw new Error(
+                `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with incompatible data schema. (agent: '${this.definition.name}')`,
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // biome-ignore lint/suspicious/useAwait: <explanation>
+  async start() {
+    // Validate plugins
+    this.validatePlugins();
+
+    // Start plugins
+    for (const plugin of this.definition.plugins) {
+      // Parse the config through the plugin's zod schema to apply defaults
+      const config = plugin.config.parse(this.definition.pluginConfigs[plugin.name] ?? {});
+      const runner = new PluginRunner(this, plugin, config);
       this.plugins[plugin.name] = runner;
       runner.start();
     }

@@ -1,24 +1,37 @@
 import "dotenv/config";
 import { Agent } from "./agent/agent";
 import { defineAgent } from "./agent/definition";
-import { corePlugin } from "./plugins/core/plugin";
+import { corePlugin } from "./plugins/core/core";
+import { defineMemory } from "./plugins/memories/definition";
+import { memoriesPlugin } from "./plugins/memories/memories";
 
 async function main() {
-  console.log("Starting agent server");
   const definition = defineAgent("demo")
+    .plugins([corePlugin, memoriesPlugin])
     .config({
       transport: {
         provider: "livekit",
       },
-      models: {
-        llm: {
-          provider: "mistral",
-        },
-      },
     })
-    .plugins([corePlugin])
     .core({})
-    ._definition();
+    .memories({
+      items: [
+        defineMemory("all-messages")
+          .behavior("blocking")
+          .onHistoryChange((history) => {
+            console.log("history", history);
+          })
+          .getOutput(() => [
+            {
+              id: "1",
+              role: "user",
+              content: "Hello, how are you?",
+              createdAt: Date.now(),
+              lastUpdated: Date.now(),
+            },
+          ]),
+      ],
+    })._definition;
 
   const agent = new Agent(definition);
 
