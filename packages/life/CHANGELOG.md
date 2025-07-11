@@ -1,5 +1,18 @@
 # life
 
+## 0.6.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [8a45f00](https://github.com/lifejs/lifejs/commit/8a45f00893d9c67ad4f89707e0bc061881a0cadb) — Fully functional memories plugin
+- [@LilaRest](https://github.com/LilaRest) in [68f67dc](https://github.com/lifejs/lifejs/commit/68f67dc6c2bbab1ca85f490ac65e7d3ff2fed269) — Wire plugins interceptors to the event loop of the external dependency
+- [@LilaRest](https://github.com/LilaRest) in [89fc2d1](https://github.com/lifejs/lifejs/commit/89fc2d14ebd925bf7957135630a53f0bcc7645ba) — New life/define export
+- [@LilaRest](https://github.com/LilaRest) in [113c9fc](https://github.com/lifejs/lifejs/commit/113c9fce224c062bbbdcb4c90879a3a72a4b426d) — Huge refactoring/refinement of plugins' dependencies and methods + draft memories plugin
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [ab75a12](https://github.com/lifejs/lifejs/commit/ab75a12c81a0fc55751cadac990f4200e487757f) — Fix plugin methods in agent definition not assigning plugin methods after called
+
 ## 0.5.1
 
 ### Patch Changes
