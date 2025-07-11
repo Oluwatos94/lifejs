@@ -1,13 +1,10 @@
 import "dotenv/config";
 import { Agent } from "./agent/agent";
-import { defineAgent } from "./agent/definition";
-import { corePlugin } from "./plugins/core/core";
-import { defineMemory } from "./plugins/memories/definition";
-import { memoriesPlugin } from "./plugins/memories/memories";
+import { defaults, defineAgent, defineMemory } from "./exports/define";
 
 async function main() {
-  const definition = defineAgent("demo")
-    .plugins([corePlugin, memoriesPlugin])
+  const builder = defineAgent("demo")
+    .plugins([...defaults.plugins])
     .config({
       transport: {
         provider: "livekit",
@@ -31,9 +28,9 @@ async function main() {
             },
           ]),
       ],
-    })._definition;
+    });
 
-  const agent = new Agent(definition);
+  const agent = new Agent(builder._definition);
 
   // Handle graceful shutdown
   let isShuttingDown = false;

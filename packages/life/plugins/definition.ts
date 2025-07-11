@@ -1,6 +1,6 @@
+import type { Agent } from "@/agent/agent";
 import type { AsyncQueue } from "@/shared/async-queue";
 import { z } from "zod";
-import type { Agent } from "../agent/agent";
 
 /** 
 @dev Because this plugin builder uses a lot of union and nested types, it might be a little slow with 

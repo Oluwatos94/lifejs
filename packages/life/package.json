@@ -10,14 +10,14 @@
     "life": "./bin/cli.js"
   },
   "exports": {
-    "./agent": {
+    "./define": {
       "import": {
-        "types": "./dist/agent/agent.d.ts",
-        "default": "./dist/agent/agent.mjs"
+        "types": "./dist/exports/define.d.ts",
+        "default": "./dist/exports/define.mjs"
       },
       "require": {
-        "types": "./dist/agent/agent.d.ts",
-        "default": "./dist/agent/agent.js"
+        "types": "./dist/exports/define.d.ts",
+        "default": "./dist/exports/define.js"
       }
     },
     "./client": {
