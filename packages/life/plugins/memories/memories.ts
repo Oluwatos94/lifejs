@@ -24,24 +24,16 @@ export const memoriesPlugin = definePlugin("memories")
   .context({
     lastResults: new Map<string, Message[]>(),
   })
-  .addEffect("update-last-results", ({ event, context, dependencies }) => {
-    dependencies.core.methods.createMessage({
-      role: "user",
-      content: "Hello, world!",
-    });
-  })
   .addInterceptor(
     "intercept-core-resources-response",
     ({ dependencyName, event, next, config }) => {
-      if (dependencyName !== "core" && event.type !== "agent.resources-response") return;
-
+      if (dependencyName !== "core" || event.type !== "agent.resources-response") return;
       // Build memories messages
       const memoriesMessages = config.items.flatMap((item) => {
         const getOutput = item._definition().getOutput;
         if (typeof getOutput === "function") return getOutput();
         return getOutput ?? [];
       });
-
       // Override the resources response with the messages produced by the memories
       next({
         ...event,

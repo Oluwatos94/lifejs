@@ -53,19 +53,11 @@ export class Agent {
       tts: new ttsProvider.class(definition.config.models.tts),
     };
 
-    // Proxy some methods of the core plugin.
-    // if (this.plugins.core) {
-
-    // }
-
-    // // Proxy other default plugins for easier access.
-    // if (this.plugins.actions) this.actions = this.plugins.actions;
-    // if (this.plugins.memories) this.memories = this.plugins.memories;
-    // if (this.plugins.stores) this.stores = this.plugins.stores;
-    // if (this.plugins.collections) this.collections = this.plugins.collections;
+    // Validate plugins
+    this.#validatePlugins();
   }
 
-  validatePlugins() {
+  #validatePlugins() {
     // Validate plugins have unique names
     const pluginNames = this.definition.plugins.map((plugin) => plugin.name);
     const duplicates = pluginNames.filter((name, index) => pluginNames.indexOf(name) !== index);
@@ -137,17 +129,38 @@ export class Agent {
 
   // biome-ignore lint/suspicious/useAwait: <explanation>
   async start() {
-    // Validate plugins
-    this.validatePlugins();
-
-    // Start plugins
+    // Phase 1: Instantiate all plugin runners
     for (const plugin of this.definition.plugins) {
       // Parse the config through the plugin's zod schema to apply defaults
       const config = plugin.config.parse(this.definition.pluginConfigs[plugin.name] ?? {});
       const runner = new PluginRunner(this, plugin, config);
       this.plugins[plugin.name] = runner;
-      runner.start();
     }
+
+    // Phase 2: Register interceptors
+    for (const plugin of this.definition.plugins) {
+      for (const interceptor of Object.values(plugin.interceptors ?? {})) {
+        // Register this interceptor with each dependency it intercepts
+        for (const depName of Object.keys(plugin.dependencies ?? {})) {
+          const dependentRunner = this.plugins[depName];
+          if (dependentRunner) {
+            dependentRunner.registerExternalInterceptor({
+              // biome-ignore lint/style/noNonNullAssertion: Created above, so exists
+              runner: this.plugins[plugin.name]!,
+              interceptor: interceptor,
+            });
+          }
+        }
+      }
+    }
+
+    // Phase 3: Start all plugin runners
+    const startPromises = [];
+    for (const plugin of this.definition.plugins) {
+      const runner = this.plugins[plugin.name];
+      if (runner) startPromises.push(runner.start());
+    }
+    await Promise.all(startPromises);
   }
 
   async stop() {

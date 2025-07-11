@@ -2,20 +2,29 @@ import type { Agent } from "@/agent/agent";
 import type {
   EmitFunction,
   PluginConfig,
+  PluginConfigDefinition,
   PluginContext,
   PluginDefinition,
+  PluginDependenciesDefinition,
   PluginEvent,
   PluginEventsDefinition,
+  PluginInterceptorFunction,
 } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
 import { klona } from "@/shared/klona";
 import { newId } from "@/shared/prefixed-id";
+
+type PluginExternalInterceptor = {
+  runner: PluginRunner<PluginDefinition>;
+  interceptor: PluginInterceptorFunction<PluginDependenciesDefinition, PluginConfigDefinition>;
+};
 
 // - Runner
 export class PluginRunner<const Definition extends PluginDefinition> {
   #agent: Agent;
   #definition: Definition;
   #config: PluginConfig<Definition["config"], "output">;
+  #externalInterceptors: PluginExternalInterceptor[] = [];
   // biome-ignore lint/suspicious/noExplicitAny: <explanation>
   #finalMethods: Record<string, (...args: any[]) => unknown | Promise<unknown>> = {};
   #queue: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">> = new AsyncQueue<
@@ -25,15 +34,12 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     event: PluginEvent<PluginEventsDefinition, "output">;
     context: Readonly<PluginContext>;
   }>[] = [];
-  #externalInterceptors: {
-    name: string;
-    interceptor: (event: PluginEvent<Definition["events"], "output">) => void;
-  }[] = [];
 
   constructor(agent: Agent, def: Definition, config: PluginConfig<Definition["config"], "output">) {
     this.#agent = agent;
     this.#definition = def;
     this.#config = config;
+
     for (const [methodName, methodDef] of Object.entries(this.#definition.methods ?? {})) {
       const method = methodDef.run.bind(this, {
         agent: this.#agent,
@@ -89,23 +95,35 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     return id;
   }
 
-  registerInterceptor(
-    name: string,
-    interceptor: (event: PluginEvent<Definition["events"], "output">) => void,
-  ) {
-    this.#externalInterceptors.push({ name, interceptor });
-  }
-
   async start() {
-    for await (const event of this.#queue) {
+    for await (let event of this.#queue) {
       // if (
       //   event.type !== "user.audio-chunk" &&
       //   event.type !== "user.voice-chunk" &&
       //   event.type !== "agent.voice-chunk"
       // )
       //   console.log("🐳", event);
-      // 1. Feed other plugins' interceptors
-      // const result;
+
+      // 1. Run external interceptors
+      let isDropped = false;
+      for (const { interceptor, runner } of this.#externalInterceptors) {
+        const drop = (_reason: string) => {
+          isDropped = true;
+        };
+        const next = (newEvent: PluginEvent<PluginEventsDefinition, "output">) => {
+          event = newEvent;
+        };
+        await interceptor({
+          config: runner.#config,
+          emit: runner.emit.bind(runner),
+          dependencyName: this.#definition.name,
+          event,
+          drop,
+          next,
+        });
+        if (isDropped) break;
+      }
+      if (isDropped) continue;
 
       // 2. Run effects
       for (const effect of Object.values(this.#definition.effects ?? {})) {
@@ -128,6 +146,10 @@ export class PluginRunner<const Definition extends PluginDefinition> {
         });
       }
     }
+  }
+
+  registerExternalInterceptor(interceptor: PluginExternalInterceptor) {
+    this.#externalInterceptors.push(interceptor);
   }
 
   async stop() {

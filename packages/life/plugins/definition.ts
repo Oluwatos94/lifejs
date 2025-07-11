@@ -159,7 +159,7 @@ export type PluginInterceptorFunction<
   event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">;
   config: PluginConfig<ConfigDef, "output">;
   drop: (reason: string) => void;
-  next: (event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "input">) => void;
+  next: (event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">) => void;
   emit: EmitFunction<DependenciesDef[keyof DependenciesDef]["events"]>;
 }) => void | Promise<void>;
 
