@@ -78,14 +78,14 @@ export class AgentDefinitionBuilder<
   ) {
     for (const plugin of plugins) {
       Object.assign(builder, {
-        [plugin.name]: this.#pluginMethod(plugin),
+        [plugin.name]: this.#pluginMethod(plugin, plugins),
       });
     }
     return builder;
   }
 
-  #pluginMethod(plugin: PluginDefinition) {
-    return (config: z.input<PluginDefinition["config"]>) => {
+  #pluginMethod(plugin: PluginDefinition, plugins: PluginDefinition[]) {
+    return (config: z.input<PluginDefinition["config"]>): unknown => {
       const builder = new AgentDefinitionBuilder({
         ...this._definition,
         pluginConfigs: {
@@ -93,7 +93,7 @@ export class AgentDefinitionBuilder<
           [plugin.name]: plugin.config.parse(config),
         },
       });
-      return builder;
+      return this.#withPluginsMethods(builder, plugins);
     };
   }
 }

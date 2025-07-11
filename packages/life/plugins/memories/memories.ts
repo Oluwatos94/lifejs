@@ -1,4 +1,4 @@
-import { type CreateMessageInput, type Message, resourcesSchema } from "@/agent/resources";
+import { type Message, createMessageInputSchema, resourcesSchema } from "@/agent/resources";
 import { definePlugin } from "@/plugins/definition";
 import { z } from "zod";
 import { MemoryDefinitionBuilder } from "./definition";
@@ -7,7 +7,7 @@ export const memoriesPlugin = definePlugin("memories")
   .dependencies({
     core: {
       methods: {
-        createMessage: z.function().args(z.custom<CreateMessageInput>()).returns(z.string()),
+        createMessage: z.function().args(createMessageInputSchema).returns(z.string()),
       },
       events: {
         "agent.resources-response": {
