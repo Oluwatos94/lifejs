@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { Agent } from "./agent/agent";
+import { History } from "./agent/history";
 import { defaults, defineAgent, defineMemory } from "./exports/define";
 
 async function main() {
@@ -13,20 +14,19 @@ async function main() {
     .core({})
     .memories({
       items: [
+        defineMemory("instructions")
+          .config({ behavior: "blocking" })
+          .getOutput(() => {
+            const history = new History([]);
+            history.createMessage({
+              role: "system",
+              content: "You are a helpful assistant called Lify.",
+            });
+            return history.getMessages();
+          }),
         defineMemory("all-messages")
-          .behavior("blocking")
-          .onHistoryChange((history) => {
-            console.log("history", history);
-          })
-          .getOutput(() => [
-            {
-              id: "1",
-              role: "user",
-              content: "Hello, how are you?",
-              createdAt: Date.now(),
-              lastUpdated: Date.now(),
-            },
-          ]),
+          .config({ behavior: "blocking" })
+          .getOutput(({ messages }) => messages),
       ],
     });
 

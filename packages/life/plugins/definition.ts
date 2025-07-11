@@ -30,6 +30,7 @@ export type PluginDependencies<Defs extends PluginDependenciesDefinition> = {
     methods: {
       [M in keyof Defs[K]["methods"]]: z.infer<Defs[K]["methods"][M]>;
     };
+    emit: EmitFunction<Defs[K]["events"]>;
   };
 };
 
@@ -153,14 +154,17 @@ export type PluginServiceFunction<
 // - Interceptors
 export type PluginInterceptorFunction<
   DependenciesDef extends PluginDependenciesDefinition,
+  EventsDef extends PluginEventsDefinition,
   ConfigDef extends PluginConfigDefinition,
+  Context extends PluginContext,
 > = (params: {
   dependencyName: keyof DependenciesDef;
   event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">;
   config: PluginConfig<ConfigDef, "output">;
+  context: Readonly<Context>;
+  emit: EmitFunction<EventsDef>;
   drop: (reason: string) => void;
   next: (event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">) => void;
-  emit: EmitFunction<DependenciesDef[keyof DependenciesDef]["events"]>;
 }) => void | Promise<void>;
 
 // - Definition
@@ -194,7 +198,12 @@ export interface PluginDefinition {
   >;
   interceptors: Record<
     string,
-    PluginInterceptorFunction<PluginDependenciesDefinition, PluginConfigDefinition>
+    PluginInterceptorFunction<
+      PluginDependenciesDefinition,
+      PluginEventsDefinition,
+      PluginConfigDefinition,
+      PluginContext
+    >
   >;
 }
 
@@ -402,7 +411,12 @@ export class PluginDefinitionBuilder<
 
   addInterceptor<const Name extends string>(
     name: Name,
-    interceptor: PluginInterceptorFunction<Definition["dependencies"], Definition["config"]>,
+    interceptor: PluginInterceptorFunction<
+      Definition["dependencies"],
+      Definition["events"],
+      Definition["config"],
+      Definition["context"]
+    >,
   ) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,

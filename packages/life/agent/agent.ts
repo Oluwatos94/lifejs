@@ -53,8 +53,21 @@ export class Agent {
       tts: new ttsProvider.class(definition.config.models.tts),
     };
 
-    // Validate plugins
+    // Initialize plugins
+    // - Validate plugins
     this.#validatePlugins();
+
+    // - Create plugin runners
+    for (const plugin of this.definition.plugins) {
+      const config = plugin.config.parse(this.definition.pluginConfigs[plugin.name] ?? {});
+      this.plugins[plugin.name] = new PluginRunner(this, plugin, config);
+    }
+
+    // - Prepare all plugins (this sets up services, interceptors, etc.)
+    for (const plugin of this.definition.plugins) {
+      // biome-ignore lint/style/noNonNullAssertion: defined above, so exists
+      this.plugins[plugin.name]!.init();
+    }
   }
 
   #validatePlugins() {
@@ -127,40 +140,9 @@ export class Agent {
     }
   }
 
-  // biome-ignore lint/suspicious/useAwait: <explanation>
   async start() {
-    // Phase 1: Instantiate all plugin runners
-    for (const plugin of this.definition.plugins) {
-      // Parse the config through the plugin's zod schema to apply defaults
-      const config = plugin.config.parse(this.definition.pluginConfigs[plugin.name] ?? {});
-      const runner = new PluginRunner(this, plugin, config);
-      this.plugins[plugin.name] = runner;
-    }
-
-    // Phase 2: Register interceptors
-    for (const plugin of this.definition.plugins) {
-      for (const interceptor of Object.values(plugin.interceptors ?? {})) {
-        // Register this interceptor with each dependency it intercepts
-        for (const depName of Object.keys(plugin.dependencies ?? {})) {
-          const dependentRunner = this.plugins[depName];
-          if (dependentRunner) {
-            dependentRunner.registerExternalInterceptor({
-              // biome-ignore lint/style/noNonNullAssertion: Created above, so exists
-              runner: this.plugins[plugin.name]!,
-              interceptor: interceptor,
-            });
-          }
-        }
-      }
-    }
-
-    // Phase 3: Start all plugin runners
-    const startPromises = [];
-    for (const plugin of this.definition.plugins) {
-      const runner = this.plugins[plugin.name];
-      if (runner) startPromises.push(runner.start());
-    }
-    await Promise.all(startPromises);
+    // Start all plugin runners
+    await Promise.all(Object.values(this.plugins).map((p) => p.start()));
   }
 
   async stop() {

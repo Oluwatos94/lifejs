@@ -1,4 +1,5 @@
 import type { Message } from "@/agent/resources";
+import { z } from "zod";
 
 // - Dependencies
 interface _MemoryDependenciesDefinition {
@@ -10,11 +11,20 @@ type MemoryDependenciesDefinition =
   | _MemoryDependenciesDefinition
   | { _definition: _MemoryDependenciesDefinition };
 
+// - Config
+export const memoryConfigSchema = z.object({
+  behavior: z.enum(["blocking", "non-blocking"]).default("blocking"),
+});
+
+export type MemoryConfig<T extends "input" | "output"> = T extends "input"
+  ? { behavior?: "blocking" | "non-blocking" }
+  : { behavior: "blocking" | "non-blocking" };
+
 // - Definition
 export type MemoryDefinition = {
   name: string;
-  behavior: "blocking" | "non-blocking";
-  getOutput?: Message[] | (() => Message[]);
+  config: MemoryConfig<"output">;
+  getOutput?: Message[] | ((params: { messages: Message[] }) => Message[] | Promise<Message[]>);
   onHistoryChange?: (history: Message[]) => void;
   dependencies: MemoryDependenciesDefinition;
 };
@@ -34,14 +44,17 @@ export class MemoryDefinitionBuilder<const Definition extends MemoryDefinition> 
     }) as MemoryDefinitionBuilder<Definition & { dependencies: Dependencies }>;
   }
 
-  behavior(behavior: "blocking" | "non-blocking") {
+  config(config: MemoryConfig<"input">) {
+    const parsedConfig = memoryConfigSchema.parse(config);
     return new MemoryDefinitionBuilder({
       ...this.#def,
-      behavior,
+      config: parsedConfig,
     });
   }
 
-  getOutput(params: Message[] | (() => Message[])) {
+  getOutput(
+    params: Message[] | ((params: { messages: Message[] }) => Message[] | Promise<Message[]>),
+  ) {
     return new MemoryDefinitionBuilder({
       ...this.#def,
       getOutput: params,
@@ -63,7 +76,7 @@ export class MemoryDefinitionBuilder<const Definition extends MemoryDefinition> 
 export function defineMemory<const Name extends string>(name: Name) {
   return new MemoryDefinitionBuilder({
     name,
-    behavior: "blocking",
+    config: memoryConfigSchema.parse({}), // Will default to { behavior: "blocking" }
     dependencies: {
       stores: [],
       collections: [],
