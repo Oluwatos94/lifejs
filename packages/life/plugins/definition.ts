@@ -14,17 +14,17 @@ typesafe experience).
 type AnyZodFunction = z.ZodFunction<any, any>;
 
 // - Common
-export type EmitFunction<EventsDef extends PluginEventsDef = PluginEventsDef> = (
+export type EmitFunction<EventsDef extends PluginEventsDefinition = PluginEventsDefinition> = (
   event: PluginEvent<EventsDef, "input">,
 ) => string;
 
 // - Dependencies
 export type PluginDependencyDefinition = {
-  events: PluginEventsDef;
+  events: PluginEventsDefinition;
   methods: Record<string, AnyZodFunction>;
 };
-export type PluginDependenciesDef = Record<string, PluginDependencyDefinition>;
-export type PluginDependencies<Defs extends PluginDependenciesDef> = {
+export type PluginDependenciesDefinition = Record<string, PluginDependencyDefinition>;
+export type PluginDependencies<Defs extends PluginDependenciesDefinition> = {
   [K in keyof Defs]: {
     events: Defs[K]["events"];
     methods: {
@@ -34,10 +34,11 @@ export type PluginDependencies<Defs extends PluginDependenciesDef> = {
 };
 
 // - Config
-export type PluginConfigDef = z.AnyZodObject;
-export type PluginConfig<Def extends PluginConfigDef, T extends "input" | "output"> = Readonly<
-  T extends "input" ? z.input<Def> : z.output<Def>
->;
+export type PluginConfigDefinition = z.AnyZodObject;
+export type PluginConfig<
+  Def extends PluginConfigDefinition,
+  T extends "input" | "output",
+> = Readonly<T extends "input" ? z.input<Def> : z.output<Def>>;
 
 // - Context
 type ContextValuePrimitives =
@@ -60,13 +61,12 @@ type ContextValue =
 export type PluginContext = Record<string, ContextValue>;
 
 // - Events
-export type PluginEventDataSchema = z.Schema;
-export type PluginEventsDef = Record<string, { dataSchema?: PluginEventDataSchema }>;
-export type PluginEvent<EventsDef extends PluginEventsDef, T extends "input" | "output"> = {
+export type PluginEventsDefinition = Record<string, { dataSchema?: z.Schema }>;
+export type PluginEvent<EventsDef extends PluginEventsDefinition, T extends "input" | "output"> = {
   [K in keyof EventsDef]: {
     type: K extends string ? K : never;
     urgent?: boolean;
-  } & (EventsDef[K]["dataSchema"] extends PluginEventDataSchema
+  } & (EventsDef[K]["dataSchema"] extends z.Schema
     ? {
         data: T extends "input"
           ? z.input<EventsDef[K]["dataSchema"]>
@@ -105,7 +105,10 @@ export type PluginMethods<MethodsDef extends PluginMethodsDef | undefined> =
       {};
 
 // - Lifecycle
-export type PluginLifecycle<ConfigDef extends PluginConfigDef, Context extends PluginContext> = {
+export type PluginLifecycle<
+  ConfigDef extends PluginConfigDefinition,
+  Context extends PluginContext,
+> = {
   onStart?: (params: { config: PluginConfig<ConfigDef, "output">; context: Context }) => void;
   onStop?: (params: { config: PluginConfig<ConfigDef, "output">; context: Context }) => void;
   onError?: (params: { config: PluginConfig<ConfigDef, "output">; context: Context }) => void;
@@ -113,9 +116,9 @@ export type PluginLifecycle<ConfigDef extends PluginConfigDef, Context extends P
 
 // - Effects
 export type PluginEffectFunction<
-  DependenciesDef extends PluginDependenciesDef,
-  EventsDef extends PluginEventsDef,
-  ConfigDef extends PluginConfigDef,
+  DependenciesDef extends PluginDependenciesDefinition,
+  EventsDef extends PluginEventsDefinition,
+  ConfigDef extends PluginConfigDefinition,
   Context extends PluginContext,
   MethodsDef extends PluginMethodsDef | undefined,
 > = (params: {
@@ -130,9 +133,9 @@ export type PluginEffectFunction<
 
 // - Services
 export type PluginServiceFunction<
-  DependenciesDef extends PluginDependenciesDef,
-  EventsDef extends PluginEventsDef,
-  ConfigDef extends PluginConfigDef,
+  DependenciesDef extends PluginDependenciesDefinition,
+  EventsDef extends PluginEventsDefinition,
+  ConfigDef extends PluginConfigDefinition,
   Context extends PluginContext,
   MethodsDef extends PluginMethodsDef | undefined,
 > = (params: {
@@ -149,8 +152,8 @@ export type PluginServiceFunction<
 
 // - Interceptors
 export type PluginInterceptorFunction<
-  DependenciesDef extends PluginDependenciesDef,
-  ConfigDef extends PluginConfigDef,
+  DependenciesDef extends PluginDependenciesDefinition,
+  ConfigDef extends PluginConfigDefinition,
 > = (params: {
   dependencyName: keyof DependenciesDef;
   event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">;
@@ -163,18 +166,18 @@ export type PluginInterceptorFunction<
 // - Definition
 export interface PluginDefinition {
   readonly name: string;
-  dependencies: PluginDependenciesDef;
-  config: PluginConfigDef;
+  dependencies: PluginDependenciesDefinition;
+  config: PluginConfigDefinition;
   context: PluginContext;
-  events: PluginEventsDef;
+  events: PluginEventsDefinition;
   methods: PluginMethodsDef;
-  lifecycle: PluginLifecycle<PluginConfigDef, PluginContext>;
+  lifecycle: PluginLifecycle<PluginConfigDefinition, PluginContext>;
   effects: Record<
     string,
     PluginEffectFunction<
-      PluginDependenciesDef,
-      PluginEventsDef,
-      PluginConfigDef,
+      PluginDependenciesDefinition,
+      PluginEventsDefinition,
+      PluginConfigDefinition,
       PluginContext,
       PluginMethodsDef | undefined
     >
@@ -182,14 +185,17 @@ export interface PluginDefinition {
   services: Record<
     string,
     PluginServiceFunction<
-      PluginDependenciesDef,
-      PluginEventsDef,
-      PluginConfigDef,
+      PluginDependenciesDefinition,
+      PluginEventsDefinition,
+      PluginConfigDefinition,
       PluginContext,
       PluginMethodsDef | undefined
     >
   >;
-  interceptors: Record<string, PluginInterceptorFunction<PluginDependenciesDef, PluginConfigDef>>;
+  interceptors: Record<
+    string,
+    PluginInterceptorFunction<PluginDependenciesDefinition, PluginConfigDefinition>
+  >;
 }
 
 // - Plugin
@@ -206,7 +212,9 @@ export class PluginDefinitionBuilder<
     this._definition = def;
   }
 
-  dependencies<const NewDependencies extends PluginDependenciesDef>(dependencies: NewDependencies) {
+  dependencies<const NewDependencies extends PluginDependenciesDefinition>(
+    dependencies: NewDependencies,
+  ) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       dependencies: dependencies,
@@ -220,7 +228,7 @@ export class PluginDefinitionBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods | "dependencies">;
   }
 
-  config<const ConfigDef extends PluginConfigDef>(config: ConfigDef) {
+  config<const ConfigDef extends PluginConfigDefinition>(config: ConfigDef) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       config,
@@ -248,7 +256,7 @@ export class PluginDefinitionBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods | "context">;
   }
 
-  events<const EventsDef extends PluginEventsDef>(events: EventsDef) {
+  events<const EventsDef extends PluginEventsDefinition>(events: EventsDef) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       events,

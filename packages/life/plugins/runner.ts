@@ -5,7 +5,7 @@ import type {
   PluginContext,
   PluginDefinition,
   PluginEvent,
-  PluginEventsDef,
+  PluginEventsDefinition,
 } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
 import { klona } from "@/shared/klona";
@@ -18,11 +18,11 @@ export class PluginRunner<const Definition extends PluginDefinition> {
   #config: PluginConfig<Definition["config"], "output">;
   // biome-ignore lint/suspicious/noExplicitAny: <explanation>
   #finalMethods: Record<string, (...args: any[]) => unknown | Promise<unknown>> = {};
-  #queue: AsyncQueue<PluginEvent<PluginEventsDef, "output">> = new AsyncQueue<
-    PluginEvent<PluginEventsDef, "output">
+  #queue: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">> = new AsyncQueue<
+    PluginEvent<PluginEventsDefinition, "output">
   >();
   #servicesQueues: AsyncQueue<{
-    event: PluginEvent<PluginEventsDef, "output">;
+    event: PluginEvent<PluginEventsDefinition, "output">;
     context: Readonly<PluginContext>;
   }>[] = [];
   #externalInterceptors: {
@@ -48,7 +48,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
 
     for (const service of Object.values(this.#definition.services ?? {}) ?? []) {
       const queue = new AsyncQueue<{
-        event: PluginEvent<PluginEventsDef, "output">;
+        event: PluginEvent<PluginEventsDefinition, "output">;
         context: Readonly<PluginContext>;
       }>();
       this.#servicesQueues.push(queue);
