@@ -23,6 +23,8 @@ export type EmitFunction<EventsDef extends PluginEventsDefinition = PluginEvents
 export type PluginDependencyDefinition = {
   events: PluginEventsDefinition;
   methods: Record<string, AnyZodFunction>;
+  config?: PluginConfigDefinition;
+  context?: PluginContext;
 };
 export type PluginDependenciesDefinition = Record<string, PluginDependencyDefinition>;
 export type PluginDependencies<Defs extends PluginDependenciesDefinition> = {
@@ -31,6 +33,10 @@ export type PluginDependencies<Defs extends PluginDependenciesDefinition> = {
     methods: {
       [M in keyof Defs[K]["methods"]]: z.infer<Defs[K]["methods"][M]>;
     };
+    config: Defs[K]["config"] extends PluginConfigDefinition
+      ? PluginConfig<Defs[K]["config"], "output">
+      : never;
+    context: Defs[K]["context"] extends PluginContext ? Readonly<Defs[K]["context"]> : never;
     emit: EmitFunction<Defs[K]["events"]>;
   };
 };
@@ -205,14 +211,54 @@ export class PluginDefinitionBuilder<
     this._definition = def;
   }
 
-  dependencies<const NewDependencies extends PluginDependenciesDefinition>(
-    dependencies: NewDependencies,
+  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+  dependencies<const Plugins extends PluginDefinitionBuilder<any, any, any, any, any>[]>(
+    plugins: Plugins,
   ) {
+    // Convert array of plugin builders to dependencies definition
+    const dependencies: PluginDependenciesDefinition = {};
+
+    for (const plugin of plugins) {
+      const def = plugin._definition;
+      const name = def.name;
+
+      // Extract methods with their schemas
+      const methods: Record<string, AnyZodFunction> = {};
+      if (def.methods) {
+        for (const [methodName, methodDef] of Object.entries(def.methods)) {
+          if (methodDef && typeof methodDef === "object" && "schema" in methodDef) {
+            methods[methodName] = methodDef.schema as AnyZodFunction;
+          }
+        }
+      }
+
+      dependencies[name] = {
+        events: def.events || {},
+        methods,
+        config: def.config,
+        context: def.context || {},
+      };
+    }
+
+    // Type to extract dependency definition from array of plugins
+    type ExtractedDependencies = {
+      [K in Plugins[number] as K["_definition"]["name"]]: {
+        events: K["_definition"]["events"];
+        methods: K["_definition"]["methods"] extends PluginMethodsDef
+          ? {
+              [M in keyof K["_definition"]["methods"]]: K["_definition"]["methods"][M]["schema"];
+            }
+          : Record<string, never>;
+        config: K["_definition"]["config"];
+        context: K["_definition"]["context"];
+      };
+    };
+
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       dependencies: dependencies,
     }) as PluginDefinitionBuilder<
-      Definition & { dependencies: NewDependencies },
+      Definition & { dependencies: ExtractedDependencies },
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,
@@ -429,6 +475,80 @@ export class PluginDefinitionBuilder<
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods>;
   }
+
+  pick<
+    const Options extends {
+      events?: Array<keyof Definition["events"]>;
+      methods?: Array<keyof Definition["methods"]>;
+      context?: Array<keyof Definition["context"]>;
+      config?: boolean;
+    },
+  >(options: Options) {
+    // Helper to pick specific keys from an object
+    const pickKeys = <T extends Record<string, unknown>>(
+      obj: T,
+      keys: Array<keyof T> | undefined,
+    ): T => {
+      if (!keys) return obj;
+      const result = {} as T;
+      for (const key of keys) {
+        if (key in obj) result[key] = obj[key];
+      }
+      return result;
+    };
+
+    // Build the picked definition
+    const pickedDefinition: PluginDefinition = {
+      name: this._definition.name,
+      dependencies: {}, // Dependencies are not picked
+      config: options.config ? this._definition.config : z.object({}),
+      context: options.context
+        ? pickKeys(this._definition.context, options.context as string[])
+        : this._definition.context,
+      events: options.events
+        ? pickKeys(this._definition.events, options.events as string[])
+        : this._definition.events,
+      methods: options.methods
+        ? pickKeys(this._definition.methods as PluginMethodsDef, options.methods as string[])
+        : (this._definition.methods ?? {}),
+      lifecycle: {}, // Lifecycle is not picked
+      effects: {}, // Effects are not picked
+      services: {}, // Services are not picked
+      interceptors: {}, // Interceptors are not picked
+    };
+
+    // Type for the picked definition
+    type PickedDefinition = Definition & {
+      name: Definition["name"];
+      dependencies: PluginDependenciesDefinition;
+      config: Options["config"] extends true
+        ? Definition["config"]
+        : z.ZodObject<Record<string, never>>;
+      context: Options["context"] extends Array<infer K>
+        ? K extends keyof Definition["context"]
+          ? Pick<Definition["context"], K>
+          : Definition["context"]
+        : Definition["context"];
+      events: Options["events"] extends Array<infer K>
+        ? K extends keyof Definition["events"]
+          ? Pick<Definition["events"], K>
+          : Definition["events"]
+        : Definition["events"];
+      methods: Options["methods"] extends Array<infer K>
+        ? K extends keyof Definition["methods"]
+          ? Pick<Definition["methods"], K>
+          : PluginMethodsDef
+        : Definition["methods"];
+    };
+
+    return new PluginDefinitionBuilder(pickedDefinition) as unknown as PluginDefinitionBuilder<
+      PickedDefinition,
+      EffectKeys,
+      ServiceKeys,
+      InterceptorKeys,
+      ExcludedMethods
+    >;
+  }
 }
 
 export function definePlugin<const Name extends string>(name: Name) {
@@ -445,32 +565,3 @@ export function definePlugin<const Name extends string>(name: Name) {
     services: {},
   });
 }
-
-// Test the new method definition pattern
-const _testPlugin = definePlugin("test")
-  .events({
-    test: { dataSchema: z.object({ data: z.string() }) },
-  })
-  .methods({
-    sayHello: {
-      schema: z.function().args(z.string()).returns(z.string()),
-      run: ({ emit }, name) => {
-        // TypeScript should know that 'name' is string
-        emit({ type: "test", data: { data: name } });
-        return `Hello ${name}`;
-      },
-    },
-    calculate: {
-      schema: z.function().args(z.number(), z.number()).returns(z.number()),
-      run: (_params, x, y) => {
-        // TypeScript should know x and y are numbers
-        return x + y;
-      },
-    },
-    noArgs: {
-      schema: z.function().args().returns(z.void()),
-      run: ({ emit }) => {
-        emit({ type: "test", data: { data: "no args" } });
-      },
-    },
-  });

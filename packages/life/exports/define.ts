@@ -6,8 +6,7 @@ import { corePlugin } from "@/plugins/core/core";
 import { memoriesPlugin } from "@/plugins/memories/memories";
 
 export const defaults = {
-  plugins: [corePlugin, memoriesPlugin],
-  pluginsByName: {
+  plugins: {
     core: corePlugin,
     memories: memoriesPlugin,
   },

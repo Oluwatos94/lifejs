@@ -8,7 +8,7 @@ import { type MemoryDefinition, MemoryDefinitionBuilder } from "./definition";
 // Helper function to build a memory and get its output messages
 async function buildMemory(
   memory: MemoryDefinitionBuilder<MemoryDefinition>,
-  messages: Message[]
+  messages: Message[],
 ): Promise<Message[]> {
   const { getOutput } = memory._definition();
   if (typeof getOutput === "function") return await getOutput({ messages });
@@ -16,16 +16,7 @@ async function buildMemory(
 }
 
 export const memoriesPlugin = definePlugin("memories")
-  .dependencies({
-    core: {
-      methods: {},
-      events: {
-        "agent.resources-response": {
-          dataSchema: corePlugin._definition.events["agent.resources-response"].dataSchema,
-        },
-      },
-    },
-  })
+  .dependencies([corePlugin.pick({ events: ["agent.resources-response"] })])
   .config(
     z.object({
       items: z.array(z.instanceof(MemoryDefinitionBuilder)).default([]),
@@ -75,12 +66,12 @@ export const memoriesPlugin = definePlugin("memories")
       if (event.type !== "build-request") continue;
 
       const timestamp = Date.now();
-      
+
       // Update each non-blocking memory asynchronously
       for (const item of config.items) {
         const def = item._definition();
         if (def.config.behavior !== "non-blocking") continue;
-        
+
         // Fire and forget - don't await
         buildMemory(item, event.data.messages)
           .then((messages) => {
@@ -100,7 +91,7 @@ export const memoriesPlugin = definePlugin("memories")
 
       // Compute hash of input messages to check cache
       const messagesHash = await stableObjectSHA256({ messages: event.data.messages });
-      
+
       // Check if we've already computed memories for these messages
       const cachedResult = context.computedMemoriesCache.get(messagesHash);
       if (cachedResult) {
@@ -119,13 +110,13 @@ export const memoriesPlugin = definePlugin("memories")
       const memoriesMessages: Message[] = [];
 
       const timestamp = Date.now();
-      
+
       // Build all blocking memories concurrently
       const blockingResults = new Map<number, Message[]>();
       const blockingPromises = config.items.map(async (item, index) => {
         const def = item._definition();
         if (def.config.behavior !== "blocking") return;
-        
+
         const messages = await buildMemory(item, event.data.messages);
         blockingResults.set(index, messages);
         emit({
@@ -133,14 +124,14 @@ export const memoriesPlugin = definePlugin("memories")
           data: { name: def.name, messages, timestamp },
         });
       });
-      
+
       await Promise.all(blockingPromises);
 
       // Build final array in original order
       for (let i = 0; i < config.items.length; i++) {
         const item = config.items[i];
         if (!item) continue;
-        
+
         const def = item._definition();
         if (def.config.behavior === "blocking") {
           const messages = blockingResults.get(i) ?? [];
@@ -170,7 +161,7 @@ export const memoriesPlugin = definePlugin("memories")
   // Store memory results in context (only if newer than existing)
   .addEffect("store-memory-result", ({ event, context }) => {
     if (event.type !== "memory-result") return;
-    
+
     const currentTimestamp = context.memoriesLastTimestamp.get(event.data.name) ?? 0;
     if (event.data.timestamp >= currentTimestamp) {
       context.memoriesLastResults.set(event.data.name, event.data.messages);
@@ -183,5 +174,7 @@ export const memoriesPlugin = definePlugin("memories")
     // Add the request id to the processed requests ids
     context.processedRequestsIds.add(event.data.requestId);
     // Re-emit the resources response event
+    // dependencies.core.context.
+
     dependencies.core.emit({ type: "agent.resources-response", data: event.data });
   });
