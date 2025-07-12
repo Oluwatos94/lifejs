@@ -12,8 +12,8 @@ import {
 import { audioChunkToMs } from "@/shared/audio-chunk-to-ms";
 import { klona } from "@/shared/klona";
 import { RollingBuffer } from "@/shared/rolling-buffer";
+import { serialize } from "@/shared/serialize";
 import { stableDeepEqual } from "@/shared/stable-deep-equal";
-import { serializeError } from "serialize-error";
 import { z } from "zod";
 import { definePlugin } from "../definition";
 import { GenerationOrchestrator } from "./generation/orchestrator";
@@ -558,7 +558,7 @@ export const corePlugin = definePlugin("core")
             result: {
               toolId: request.id,
               toolSuccess: false,
-              toolError: JSON.stringify(serializeError(error)),
+              toolError: serialize(error as Error),
             },
           },
           urgent: true,

@@ -21,13 +21,13 @@ export type MemoryConfig<T extends "input" | "output"> = T extends "input"
   : { behavior: "blocking" | "non-blocking" };
 
 // - Definition
-export type MemoryDefinition = {
+export interface MemoryDefinition {
   name: string;
   config: MemoryConfig<"output">;
   getOutput?: Message[] | ((params: { messages: Message[] }) => Message[] | Promise<Message[]>);
   onHistoryChange?: (history: Message[]) => void;
   dependencies: MemoryDependenciesDefinition;
-};
+}
 
 // - Builder
 export class MemoryDefinitionBuilder<const Definition extends MemoryDefinition> {

@@ -1,5 +1,6 @@
 import type { Agent } from "@/agent/agent";
 import type { AsyncQueue } from "@/shared/async-queue";
+import type { SerializableValue } from "@/shared/serialize";
 import { z } from "zod";
 
 /** 
@@ -42,24 +43,7 @@ export type PluginConfig<
 > = Readonly<T extends "input" ? z.input<Def> : z.output<Def>>;
 
 // - Context
-type ContextValuePrimitives =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | bigint
-  | Date
-  | RegExp
-  | Error
-  | URL;
-type ContextValue =
-  | ContextValuePrimitives
-  | ContextValue[]
-  | Set<ContextValue>
-  | Map<string, ContextValue>
-  | { [key: string]: ContextValue };
-export type PluginContext = Record<string, ContextValue>;
+export type PluginContext = Record<string, SerializableValue>;
 
 // - Events
 export type PluginEventsDefinition = Record<string, { dataSchema?: z.Schema }>;

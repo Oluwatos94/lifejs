@@ -1,4 +1,5 @@
 import { definePlugin } from "@/plugins/definition";
+
 type Store = {
   id: string;
 };

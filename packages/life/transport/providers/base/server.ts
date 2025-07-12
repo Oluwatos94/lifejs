@@ -1,6 +1,6 @@
 import { ensureServer } from "@/shared/ensure-server";
+import { type SerializableValue, deserialize, serialize } from "@/shared/serialize";
 ensureServer("transport.server.Transport");
-import superjson from "superjson";
 import type { z } from "zod";
 
 export type ServerTransportEvent = {
@@ -34,14 +34,14 @@ export abstract class ServerTransportBase<ConfigSchema extends z.AnyZodObject> {
     );
   }
 
-  sendObject(topic: string, obj: unknown) {
-    const serialized = superjson.stringify(obj);
+  sendObject(topic: string, obj: SerializableValue) {
+    const serialized = serialize(obj);
     return this.sendText(topic, serialized);
   }
 
   receiveObject(topic: string, callback: (obj: unknown, participantId: string) => void) {
     this.receiveText(topic, (text, participantId) => {
-      const deserialized = superjson.parse(text);
+      const deserialized = deserialize(text);
       callback(deserialized, participantId);
     });
   }

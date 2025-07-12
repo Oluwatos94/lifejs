@@ -1,4 +1,4 @@
-import superjson from "superjson";
+import { type SerializableValue, deserialize, serialize } from "@/shared/serialize";
 import type { z } from "zod";
 
 export type ClientTransportEvent = never;
@@ -29,14 +29,14 @@ export abstract class ClientTransportBase<ConfigSchema extends z.AnyZodObject> {
     );
   }
 
-  sendObject(topic: string, obj: unknown) {
-    const serialized = superjson.stringify(obj);
+  sendObject(topic: string, obj: SerializableValue) {
+    const serialized = serialize(obj);
     return this.sendText(topic, serialized);
   }
 
   receiveObject(topic: string, callback: (obj: unknown, participantId: string) => void) {
     this.receiveText(topic, (text, participantId) => {
-      const deserialized = superjson.parse(text);
+      const deserialized = deserialize(text);
       callback(deserialized, participantId);
     });
   }
