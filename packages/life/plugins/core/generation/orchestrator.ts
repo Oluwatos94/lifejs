@@ -1,18 +1,18 @@
+import { z } from "zod";
 import type { Agent } from "@/agent/agent";
 import type { Resources } from "@/agent/resources";
 import type { EmitFunction, PluginEvent } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/prefixed-id";
-import { z } from "zod";
 import type { corePlugin } from "../core";
 import { Generation, type GenerationChunk } from "./generation";
 
 export type CoreEvent = PluginEvent<typeof corePlugin._definition.events, "output">;
-type CoreContext = typeof corePlugin._definition.context;
+type CoreContext = z.output<typeof corePlugin._definition.context>;
 export type CoreParams = {
   agent: Agent;
   emit: EmitFunction<typeof corePlugin._definition.events>;
-  queue: AsyncQueue<{ event: CoreEvent; context: CoreContext }>;
+  queue: AsyncQueue<{ event: CoreEvent; context: Readonly<CoreContext> }>;
   context: CoreContext;
 };
 
@@ -49,7 +49,7 @@ export class GenerationOrchestrator {
     }
   }
 
-  async #createGeneration() {
+  #createGeneration() {
     // Create the generation
     const generation = new Generation({
       agent: this.#core.agent,
@@ -73,7 +73,7 @@ export class GenerationOrchestrator {
 
   async #processGenerationEvent(event: CoreEvent) {
     // Retrieve or create the first idle generation
-    let generation = this.#generations.find((generation) => generation.status === "idle");
+    let generation = this.#generations.find((g) => g.status === "idle");
     if (!generation) generation = await this.#createGeneration();
 
     // Process the event
@@ -312,7 +312,7 @@ export class GenerationOrchestrator {
  * @param leadMs Maximum positive/negative lead you will allow.
  * @param sampleRate Sample rate of the audio chunks (default: 16000)
  */
-function throttledGenerationQueue(leadMs = 300, sampleRate = 16000) {
+function throttledGenerationQueue(leadMs = 300, sampleRate = 16_000) {
   /** Wall-clock time we pegged the *first* chunk to. */
   let anchorWallTime = Date.now();
 

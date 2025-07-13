@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { type EOUProviderConfig, eouProviderConfigSchema } from "@/models/eou";
 import { type LLMProviderConfig, llmProviderConfigSchema } from "@/models/llm";
 import { type STTProviderConfig, sttProviderConfigSchema } from "@/models/stt";
@@ -7,7 +8,6 @@ import {
   type ServerTransportProviderConfig,
   serverTransportProviderConfigSchema,
 } from "@/transport/index.server";
-import { z } from "zod";
 
 export const configDefinitionSchema = z
   .object({

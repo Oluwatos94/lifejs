@@ -1,6 +1,6 @@
+import type { z } from "zod";
 import { type ConfigDefinition, defineConfig } from "@/config";
 import type { PluginConfig, PluginDefinition, PluginDefinitionBuilder } from "@/plugins/definition";
-import type { z } from "zod";
 
 export type AgentDefinition = {
   name: string;

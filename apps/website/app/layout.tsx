@@ -41,8 +41,8 @@ const gloriaHallelujah = Gloria_Hallelujah({
 export default function Layout({ children }: { children: ReactNode }) {
   return (
     <html
-      lang="en"
       className={`${sfProDisplay.variable} ${ppNeueMontreal.variable} ${GeistMono.variable} ${gloriaHallelujah.variable}`}
+      lang="en"
       suppressHydrationWarning
     >
       <body className="flex min-h-screen flex-col bg-gradient-to-b from-white to-[#FEF7F2]">

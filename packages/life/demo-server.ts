@@ -5,7 +5,7 @@ import { defaults, defineAgent, defineMemory } from "./exports/define";
 
 async function main() {
   const builder = defineAgent("demo")
-    .plugins([...defaults.plugins])
+    .plugins([...defaults.pluginsList])
     .config({
       transport: {
         provider: "livekit",
@@ -51,7 +51,7 @@ async function main() {
   console.log("Agent server started");
 
   // Keep the process alive
-  await new Promise((resolve) => {});
+  await new Promise((resolve) => resolve(undefined));
 }
 
 main().catch((error) => {

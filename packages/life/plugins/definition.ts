@@ -1,7 +1,6 @@
+import { z } from "zod";
 import type { Agent } from "@/agent/agent";
 import type { AsyncQueue } from "@/shared/async-queue";
-import type { SerializableValue } from "@/shared/serialize";
-import { z } from "zod";
 
 /** 
 @dev Because this plugin builder uses a lot of union and nested types, it might be a little slow with 
@@ -24,7 +23,7 @@ export type PluginDependencyDefinition = {
   events: PluginEventsDefinition;
   methods: Record<string, AnyZodFunction>;
   config?: PluginConfigDefinition;
-  context?: PluginContext;
+  context?: PluginContextDefinition;
 };
 export type PluginDependenciesDefinition = Record<string, PluginDependencyDefinition>;
 export type PluginDependencies<Defs extends PluginDependenciesDefinition> = {
@@ -36,7 +35,9 @@ export type PluginDependencies<Defs extends PluginDependenciesDefinition> = {
     config: Defs[K]["config"] extends PluginConfigDefinition
       ? PluginConfig<Defs[K]["config"], "output">
       : never;
-    context: Defs[K]["context"] extends PluginContext ? Readonly<Defs[K]["context"]> : never;
+    context: Defs[K]["context"] extends PluginContextDefinition
+      ? Readonly<PluginContext<Defs[K]["context"], "output">>
+      : never;
     emit: EmitFunction<Defs[K]["events"]>;
   };
 };
@@ -49,7 +50,11 @@ export type PluginConfig<
 > = Readonly<T extends "input" ? z.input<Def> : z.output<Def>>;
 
 // - Context
-export type PluginContext = Record<string, SerializableValue>;
+export type PluginContextDefinition = z.AnyZodObject;
+export type PluginContext<
+  Def extends PluginContextDefinition,
+  T extends "input" | "output",
+> = T extends "input" ? z.input<Def> : z.output<Def>;
 
 // - Events
 export type PluginEventsDefinition = Record<string, { dataSchema?: z.Schema }>;
@@ -98,11 +103,20 @@ export type PluginMethods<MethodsDef extends PluginMethodsDef | undefined> =
 // - Lifecycle
 export type PluginLifecycle<
   ConfigDef extends PluginConfigDefinition,
-  Context extends PluginContext,
+  ContextDef extends PluginContextDefinition,
 > = {
-  onStart?: (params: { config: PluginConfig<ConfigDef, "output">; context: Context }) => void;
-  onStop?: (params: { config: PluginConfig<ConfigDef, "output">; context: Context }) => void;
-  onError?: (params: { config: PluginConfig<ConfigDef, "output">; context: Context }) => void;
+  onStart?: (params: {
+    config: PluginConfig<ConfigDef, "output">;
+    context: PluginContext<ContextDef, "output">;
+  }) => void;
+  onStop?: (params: {
+    config: PluginConfig<ConfigDef, "output">;
+    context: PluginContext<ContextDef, "output">;
+  }) => void;
+  onError?: (params: {
+    config: PluginConfig<ConfigDef, "output">;
+    context: PluginContext<ContextDef, "output">;
+  }) => void;
 };
 
 // - Effects
@@ -110,13 +124,13 @@ export type PluginEffectFunction<
   DependenciesDef extends PluginDependenciesDefinition,
   EventsDef extends PluginEventsDefinition,
   ConfigDef extends PluginConfigDefinition,
-  Context extends PluginContext,
+  ContextDef extends PluginContextDefinition,
   MethodsDef extends PluginMethodsDef | undefined,
 > = (params: {
   event: PluginEvent<EventsDef, "output">;
   agent: Agent;
   config: PluginConfig<ConfigDef, "output">;
-  context: Context;
+  context: PluginContext<ContextDef, "output">;
   methods: PluginMethods<MethodsDef>;
   dependencies: PluginDependencies<DependenciesDef>;
   emit: EmitFunction<EventsDef>;
@@ -127,12 +141,12 @@ export type PluginServiceFunction<
   DependenciesDef extends PluginDependenciesDefinition,
   EventsDef extends PluginEventsDefinition,
   ConfigDef extends PluginConfigDefinition,
-  Context extends PluginContext,
+  ContextDef extends PluginContextDefinition,
   MethodsDef extends PluginMethodsDef | undefined,
 > = (params: {
   queue: AsyncQueue<{
     event: PluginEvent<EventsDef, "output">;
-    context: Readonly<Context>;
+    context: Readonly<PluginContext<ContextDef, "output">>;
   }>;
   agent: Agent;
   config: PluginConfig<ConfigDef, "output">;
@@ -146,12 +160,12 @@ export type PluginInterceptorFunction<
   DependenciesDef extends PluginDependenciesDefinition,
   EventsDef extends PluginEventsDefinition,
   ConfigDef extends PluginConfigDefinition,
-  Context extends PluginContext,
+  ContextDef extends PluginContextDefinition,
 > = (params: {
   dependencyName: keyof DependenciesDef;
   event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">;
   config: PluginConfig<ConfigDef, "output">;
-  context: Readonly<Context>;
+  context: Readonly<PluginContext<ContextDef, "output">>;
   emit: EmitFunction<EventsDef>;
   drop: (reason: string) => void;
   next: (event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">) => void;
@@ -162,17 +176,17 @@ export interface PluginDefinition {
   readonly name: string;
   dependencies: PluginDependenciesDefinition;
   config: PluginConfigDefinition;
-  context: PluginContext;
+  context: PluginContextDefinition;
   events: PluginEventsDefinition;
   methods: PluginMethodsDef;
-  lifecycle: PluginLifecycle<PluginConfigDefinition, PluginContext>;
+  lifecycle: PluginLifecycle<PluginConfigDefinition, PluginContextDefinition>;
   effects: Record<
     string,
     PluginEffectFunction<
       PluginDependenciesDefinition,
       PluginEventsDefinition,
       PluginConfigDefinition,
-      PluginContext,
+      PluginContextDefinition,
       PluginMethodsDef | undefined
     >
   >;
@@ -182,7 +196,7 @@ export interface PluginDefinition {
       PluginDependenciesDefinition,
       PluginEventsDefinition,
       PluginConfigDefinition,
-      PluginContext,
+      PluginContextDefinition,
       PluginMethodsDef | undefined
     >
   >;
@@ -192,7 +206,7 @@ export interface PluginDefinition {
       PluginDependenciesDefinition,
       PluginEventsDefinition,
       PluginConfigDefinition,
-      PluginContext
+      PluginContextDefinition
     >
   >;
 }
@@ -256,7 +270,7 @@ export class PluginDefinitionBuilder<
 
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
-      dependencies: dependencies,
+      dependencies,
     }) as PluginDefinitionBuilder<
       Definition & { dependencies: ExtractedDependencies },
       EffectKeys,
@@ -281,7 +295,7 @@ export class PluginDefinitionBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods | "config">;
   }
 
-  context<ContextDef extends PluginContext>(context: ContextDef) {
+  context<ContextDef extends PluginContextDefinition>(context: ContextDef) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       context,
@@ -321,7 +335,7 @@ export class PluginDefinitionBuilder<
               params: {
                 agent: Agent;
                 config: PluginConfig<Definition["config"], "output">;
-                context: Readonly<Definition["context"]>;
+                context: Readonly<PluginContext<Definition["context"], "output">>;
                 emit: EmitFunction<Definition["events"]>;
               },
               ...args: z.infer<TArgs> extends readonly unknown[] ? z.infer<TArgs> : never
@@ -387,7 +401,7 @@ export class PluginDefinitionBuilder<
   }
 
   removeEffect<const Name extends EffectKeys>(name: Name) {
-    const { [name]: removed, ...remainingEffects } = this._definition.effects ?? {};
+    const { [name]: _removed, ...remainingEffects } = this._definition.effects ?? {};
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       effects: remainingEffects,
@@ -425,7 +439,7 @@ export class PluginDefinitionBuilder<
   }
 
   removeService<const Name extends ServiceKeys>(name: Name) {
-    const { [name]: removed, ...remainingServices } = this._definition.services ?? {};
+    const { [name]: _removed, ...remainingServices } = this._definition.services ?? {};
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       services: remainingServices,
@@ -462,7 +476,7 @@ export class PluginDefinitionBuilder<
   }
 
   removeInterceptor<const Name extends InterceptorKeys>(name: Name) {
-    const { [name]: removed, ...remainingInterceptors } = this._definition.interceptors ?? {};
+    const { [name]: _removed, ...remainingInterceptors } = this._definition.interceptors ?? {};
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       interceptors: remainingInterceptors,
@@ -497,13 +511,22 @@ export class PluginDefinitionBuilder<
       return result;
     };
 
+    // Helper to pick specific keys from a Zod object schema
+    const pickZodSchema = (schema: z.AnyZodObject, keys: string[] | undefined): z.AnyZodObject => {
+      if (!keys || keys.length === 0) return schema;
+      // Use Zod's native pick method
+      const pickObj: Record<string, true> = {};
+      for (const key of keys) pickObj[key] = true;
+      return schema.pick(pickObj);
+    };
+
     // Build the picked definition
     const pickedDefinition: PluginDefinition = {
       name: this._definition.name,
       dependencies: {}, // Dependencies are not picked
       config: options.config ? this._definition.config : z.object({}),
       context: options.context
-        ? pickKeys(this._definition.context, options.context as string[])
+        ? pickZodSchema(this._definition.context, options.context as string[])
         : this._definition.context,
       events: options.events
         ? pickKeys(this._definition.events, options.events as string[])
@@ -553,10 +576,10 @@ export class PluginDefinitionBuilder<
 
 export function definePlugin<const Name extends string>(name: Name) {
   return new PluginDefinitionBuilder({
-    name: name,
+    name,
     dependencies: {},
     config: z.object({}),
-    context: {},
+    context: z.object({}),
     events: {},
     methods: {},
     lifecycle: {},

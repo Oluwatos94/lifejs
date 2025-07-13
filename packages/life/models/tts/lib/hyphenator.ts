@@ -1,6 +1,12 @@
 // Copyright 2024 LiveKit, Inc.
 // Taken from https://github.com/livekit/agents-js/blob/544353f7ec38b0f0f8837a7ae2e5d6ecf2176ee6/agents/src/tokenize/basic/hyphenator.ts
 
+// Top-level regex patterns
+const WHITESPACE_PATTERN = /\s+/;
+const HYPHEN_PATTERN = /-/g;
+const DIGIT_PATTERN = /[0-9]/g;
+const LETTER_DOT_PATTERN = /[.a-z]/;
+
 const END = Symbol("END");
 interface Tree {
   [id: string]: Tree | string;
@@ -17,19 +23,19 @@ export class Hyphenator {
     this.tree = {};
     this.exceptions = {};
 
-    for (const pattern of patterns.split(/\s+/)) {
+    for (const pattern of patterns.split(WHITESPACE_PATTERN)) {
       this.#insertPattern(pattern);
     }
 
-    for (const exception of exceptions.split(/\s+/)) {
+    for (const exception of exceptions.split(WHITESPACE_PATTERN)) {
       const points = [0, ...Array.from(exception).map((c) => (c === "-" ? 1 : 0))];
-      this.exceptions[exception.replace(/-/g, "")] = points;
+      this.exceptions[exception.replace(HYPHEN_PATTERN, "")] = points;
     }
   }
 
   #insertPattern(pattern: string) {
-    const chars = pattern.replaceAll(/[0-9]/g, "");
-    const points = pattern.split(/[.a-z]/).map((d) => Number.parseInt(d || "0"));
+    const chars = pattern.replaceAll(DIGIT_PATTERN, "");
+    const points = pattern.split(LETTER_DOT_PATTERN).map((d) => Number.parseInt(d || "0", 10));
 
     let node = this.tree;
     for (const char of chars) {

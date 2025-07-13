@@ -32,7 +32,7 @@ export class LiveKitClientTransport extends ClientTransportBase<z.AnyZodObject> 
   ): asserts connector is LiveKitClientTransport & {
     room: Room & { localParticipant: NonNullable<Room["localParticipant"]> };
   } {
-    if (!this.isConnected || !this.room?.localParticipant)
+    if (!(this.isConnected && this.room?.localParticipant))
       throw new Error(
         `Calling this code (${name}) requires a connected room. Call joinRoom() first.`,
       );

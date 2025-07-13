@@ -4,6 +4,7 @@ import type {
   PluginConfig,
   PluginConfigDefinition,
   PluginContext,
+  PluginContextDefinition,
   PluginDefinition,
   PluginDependencies,
   PluginDependenciesDefinition,
@@ -21,7 +22,7 @@ type PluginExternalInterceptor<TDefinition extends PluginDefinition = PluginDefi
     PluginDependenciesDefinition,
     PluginEventsDefinition,
     PluginConfigDefinition,
-    PluginContext
+    PluginContextDefinition
   >;
 };
 
@@ -30,6 +31,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
   #agent: Agent;
   #definition: Definition;
   #config: PluginConfig<Definition["config"], "output">;
+  #context: PluginContext<Definition["context"], "output">;
   #externalInterceptors: PluginExternalInterceptor<PluginDefinition>[] = [];
   // biome-ignore lint/suspicious/noExplicitAny: <explanation>
   #finalMethods: Record<string, (...args: any[]) => unknown | Promise<unknown>> = {};
@@ -38,19 +40,20 @@ export class PluginRunner<const Definition extends PluginDefinition> {
   >();
   #servicesQueues: AsyncQueue<{
     event: PluginEvent<PluginEventsDefinition, "output">;
-    context: Readonly<PluginContext>;
+    context: Readonly<PluginContext<Definition["context"], "output">>;
   }>[] = [];
 
   constructor(agent: Agent, def: Definition, config: PluginConfig<Definition["config"], "output">) {
     this.#agent = agent;
     this.#definition = def;
     this.#config = config;
+    this.#context = def.context.parse({});
 
     for (const [methodName, methodDef] of Object.entries(this.#definition.methods ?? {})) {
       const method = methodDef.run.bind(this, {
         agent: this.#agent,
         config: this.#config,
-        context: this.#definition.context,
+        context: this.#context,
         emit: this.emit.bind(this) as EmitFunction,
       });
       this.#finalMethods[methodName] = method;
@@ -73,6 +76,8 @@ export class PluginRunner<const Definition extends PluginDefinition> {
       dependencies[depName] = {
         events: depDef.events,
         methods: depRunner.methods,
+        config: depRunner.#config,
+        context: depRunner.#context,
         emit: depRunner.emit.bind(depRunner),
       };
     }
@@ -87,7 +92,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     for (const service of Object.values(this.#definition.services ?? {}) ?? []) {
       const queue = new AsyncQueue<{
         event: PluginEvent<PluginEventsDefinition, "output">;
-        context: Readonly<PluginContext>;
+        context: Readonly<PluginContext<Definition["context"], "output">>;
       }>();
       this.#servicesQueues.push(queue);
       service({
@@ -157,9 +162,10 @@ export class PluginRunner<const Definition extends PluginDefinition> {
         const next = (newEvent: PluginEvent<PluginEventsDefinition, "output">) => {
           event = newEvent;
         };
+        // biome-ignore lint/nursery/noAwaitInLoop: sequential execution expected here
         await interceptor({
           config: runner.#config,
-          context: runner.#definition.context,
+          context: runner.#context,
           emit: runner.emit.bind(runner),
           dependencyName: this.#definition.name,
           event,
@@ -173,11 +179,12 @@ export class PluginRunner<const Definition extends PluginDefinition> {
       // 2. Run effects
       const dependencies = this.#buildDependencies();
       for (const effect of Object.values(this.#definition.effects ?? {})) {
+        // biome-ignore lint/nursery/noAwaitInLoop: sequential execution expected here
         await effect({
           agent: this.#agent,
           event: klona(event),
           config: this.#config,
-          context: this.#definition.context,
+          context: this.#context,
           methods: this.#finalMethods,
           emit: this.emit.bind(this) as EmitFunction<Definition["events"]>,
           dependencies,
@@ -188,7 +195,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
       for (const queue of this.#servicesQueues) {
         queue.push({
           event: klona(event),
-          context: klona(this.#definition.context),
+          context: klona(this.#context),
         });
       }
     }

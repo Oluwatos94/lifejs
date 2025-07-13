@@ -150,22 +150,19 @@ export class Generation {
         }
       }
       // Else if text-only is required, push chunks directly to the queue
-      // biome-ignore lint/style/useCollapsedElseIf: <explanation>
-      else {
-        // - Content
-        if (chunk.type === "content")
-          this.queue.push({ type: "content", textChunk: chunk.content });
-        // - Tools
-        else if (chunk.type === "tools") {
-          this.queue.push({ type: "tool-requests", requests: chunk.tools });
-          this.end();
-          break;
-        }
-        // - End
-        else if (chunk.type === "end") {
-          this.end();
-          break;
-        }
+      // - Content
+      else if (chunk.type === "content")
+        this.queue.push({ type: "content", textChunk: chunk.content });
+      // - Tools
+      else if (chunk.type === "tools") {
+        this.queue.push({ type: "tool-requests", requests: chunk.tools });
+        this.end();
+        break;
+      }
+      // - End
+      else if (chunk.type === "end") {
+        this.end();
+        break;
       }
     }
   }

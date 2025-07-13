@@ -1,5 +1,5 @@
-import type { Message } from "@/agent/resources";
 import { z } from "zod";
+import type { Message } from "@/agent/resources";
 
 // - Dependencies
 interface _MemoryDependenciesDefinition {
@@ -53,6 +53,7 @@ export class MemoryDefinitionBuilder<const Definition extends MemoryDefinition> 
   }
 
   getOutput(
+    // biome-ignore lint/nursery/noShadow: expected here
     params: Message[] | ((params: { messages: Message[] }) => Message[] | Promise<Message[]>),
   ) {
     return new MemoryDefinitionBuilder({

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import Image from "next/image";
 
 interface Change {
   content: string;
@@ -30,6 +31,7 @@ async function parseChangelog(): Promise<Version[]> {
 
     for (const line of lines) {
       // Match version headers like "## 0.1.1"
+      // biome-ignore lint/performance/useTopLevelRegex: no perfs issue here
       const versionMatch = line.match(/^## (\d+\.\d+\.\d+)/);
       if (versionMatch) {
         if (currentVersion) {
@@ -81,6 +83,7 @@ async function parseChangelog(): Promise<Version[]> {
 
 function parseChangeLine(line: string): Change | null {
   // Parse line format: "- [@author](link) **(New contributor! 🎉)** in [commit](link) — description"
+  // biome-ignore lint/performance/useTopLevelRegex: no perfs issue here
   const regex = /- (.+?) in \[([^\]]+)\]\(([^)]+)\) — (.+)/;
   const match = line.match(regex);
 
@@ -112,12 +115,12 @@ function ChangeItem({ change }: { change: Change }) {
     <div className="border-black/5 border-b py-3 last:border-b-0">
       <div className="flex items-start gap-3">
         <div className="-space-x-1.5 flex shrink-0 pt-0.5">
-          {change.authors.slice(0, 3).map((author, idx) => (
-            <img
-              key={idx}
-              src={`https://github.com/${author}.png?size=24`}
+          {change.authors.slice(0, 3).map((author) => (
+            <Image
               alt={`${author}'s avatar`}
               className="h-5 w-5 rounded-full border border-white/80"
+              key={author}
+              src={`https://github.com/${author}.png?size=24`}
             />
           ))}
         </div>
@@ -127,13 +130,13 @@ function ChangeItem({ change }: { change: Change }) {
           <div className="flex items-center gap-2 text-black/40 text-xs">
             <span>
               {change.authors.map((author, idx) => (
-                <span key={idx}>
+                <span key={author}>
                   {idx > 0 && ", "}
                   <a
-                    href={`https://github.com/${author}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="transition-colors hover:text-black/60"
+                    href={`https://github.com/${author}`}
+                    rel="noopener noreferrer"
+                    target="_blank"
                   >
                     @{author}
                   </a>
@@ -142,10 +145,10 @@ function ChangeItem({ change }: { change: Change }) {
             </span>
             <span>•</span>
             <a
-              href={change.link}
-              target="_blank"
-              rel="noopener noreferrer"
               className="transition-colors hover:text-black/60"
+              href={change.link}
+              rel="noopener noreferrer"
+              target="_blank"
             >
               {change.linkType === "pr" ? "PR" : "commit"}
             </a>
@@ -156,21 +159,15 @@ function ChangeItem({ change }: { change: Change }) {
   );
 }
 
-function VersionSection({
-  title,
-  changes,
-}: {
-  title: string;
-  changes: Change[];
-}) {
+function VersionSection({ title, changes }: { title: string; changes: Change[] }) {
   if (changes.length === 0) return null;
 
   return (
     <div className="mb-6">
       <h4 className="mb-3 font-medium text-black/60 text-sm">{title}</h4>
       <div className="space-y-0">
-        {changes.map((change, idx) => (
-          <ChangeItem key={idx} change={change} />
+        {changes.map((change) => (
+          <ChangeItem change={change} key={change.link} />
         ))}
       </div>
     </div>
@@ -194,9 +191,9 @@ function VersionCard({ version }: { version: Version }) {
       </div>
 
       <div className="space-y-6">
-        <VersionSection title="Breaking Changes" changes={version.breaking} />
-        <VersionSection title="Features" changes={version.features} />
-        <VersionSection title="Fixes" changes={version.fixes} />
+        <VersionSection changes={version.breaking} title="Breaking Changes" />
+        <VersionSection changes={version.features} title="Features" />
+        <VersionSection changes={version.fixes} title="Fixes" />
       </div>
     </div>
   );
@@ -229,25 +226,25 @@ export default async function ChangelogPage() {
 
         <div className="mt-16 border-black/5 border-t pt-8 text-center">
           <a
-            href="https://github.com/lifejs/lifejs/blob/main/packages/life/CHANGELOG.md"
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-black/50 text-sm transition-colors hover:text-black/70"
+            href="https://github.com/lifejs/lifejs/blob/main/packages/life/CHANGELOG.md"
+            rel="noopener noreferrer"
+            target="_blank"
           >
             View full changelog on GitHub
             <svg
+              aria-label="External link"
               className="h-3 w-3"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
-              aria-label="External link"
             >
               <title>External link</title>
               <path
+                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
               />
             </svg>
           </a>

@@ -1,5 +1,5 @@
-import { clientTransportProviders } from "@/transport/index.client";
 import { z } from "zod";
+import { clientTransportProviders } from "@/transport/index.client";
 
 export const agentClientConfigSchema = z.object({});
 
@@ -9,9 +9,11 @@ export type AgentClientConfig<T extends "input" | "output"> = T extends "input"
 
 export class AgentClient {
   transport: InstanceType<(typeof clientTransportProviders)[keyof typeof clientTransportProviders]>;
+  config: AgentClientConfig<"output">;
 
   constructor(config: AgentClientConfig<"output">) {
     this.transport = new clientTransportProviders.livekit();
+    this.config = config;
   }
 
   async inviteAgent(roomId: string, token: string) {

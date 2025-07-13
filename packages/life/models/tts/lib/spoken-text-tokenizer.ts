@@ -16,8 +16,14 @@ import { hyphenator } from "./hyphenator";
  * corresponding text chunks.
  */
 
+// Top-level regex patterns
+const ESCAPE_PATTERN = /[-/\\^$*+?.()|[\]{}]/g;
+const NON_BLANK_PATTERN = /\S+/g;
+const ALL_DIGITS_PATTERN = /^\d+$/;
+const WHITESPACE_PATTERN = /\s+/;
+
 const toWords = new ToWords({ localeCode: "en-US" });
-const esc = (c: string) => c.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+const esc = (c: string) => c.replace(ESCAPE_PATTERN, "\\$&");
 
 // Punctuation leading to short pauses when spoken
 export const PAUSE_PUNCT = [
@@ -81,7 +87,7 @@ const isSilenceChunk = (c: Chunk | null): c is Chunk =>
 export class SpokenTextTokenizer {
   /* ────────── core iterator ────────── */
   private *iter(text: string): Generator<Chunk> {
-    const nonBlank = /\S+/g;
+    const nonBlank = NON_BLANK_PATTERN;
     let m: RegExpExecArray | null;
     let last: Chunk | null = null;
 
@@ -139,8 +145,11 @@ export class SpokenTextTokenizer {
 
       /* emit the main word / number, hyphenated */
       if (token) {
-        if (/^\d+$/.test(token)) {
-          for (const w of toWords.convert(Number(token)).replace(/-/g, " ").split(/\s+/))
+        if (ALL_DIGITS_PATTERN.test(token)) {
+          for (const w of toWords
+            .convert(Number(token))
+            .replace(/-/g, " ")
+            .split(WHITESPACE_PATTERN))
             for (const p of hyphenator.hyphenateWord(w)) {
               const c = { chunk: p, start: pos, end: pos };
               yield c;
@@ -186,7 +195,7 @@ export class SpokenTextTokenizer {
   }
   private *emitExpanded(mark: string, at: number, save: (c: Chunk) => void): Generator<Chunk> {
     // biome-ignore lint/style/noNonNullAssertion: <explanation>
-    for (const w of SPOKEN_PUNCT[mark]!.split(/\s+/))
+    for (const w of SPOKEN_PUNCT[mark]!.split(WHITESPACE_PATTERN))
       for (const p of hyphenator.hyphenateWord(w)) {
         const c = { chunk: p, start: at, end: at + mark.length };
         save(c);

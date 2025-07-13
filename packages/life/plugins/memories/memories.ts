@@ -1,7 +1,7 @@
+import { z } from "zod";
 import { type Message, messageSchema } from "@/agent/resources";
 import { definePlugin } from "@/plugins/definition";
 import { stableObjectSHA256 } from "@/shared/stable-sha256";
-import { z } from "zod";
 import { corePlugin } from "../core/core";
 import { type MemoryDefinition, MemoryDefinitionBuilder } from "./definition";
 
@@ -37,12 +37,16 @@ export const memoriesPlugin = definePlugin("memories")
       }),
     },
   })
-  .context({
-    memoriesLastResults: new Map<string, Message[]>(),
-    memoriesLastTimestamp: new Map<string, number>(),
-    processedRequestsIds: new Set<string>(),
-    computedMemoriesCache: new Map<string, { hash: string; memories: Message[] }>(),
-  })
+  .context(
+    z.object({
+      memoriesLastResults: z.custom<Map<string, Message[]>>().default(new Map()),
+      memoriesLastTimestamp: z.custom<Map<string, number>>().default(new Map()),
+      processedRequestsIds: z.custom<Set<string>>().default(new Set()),
+      computedMemoriesCache: z
+        .custom<Map<string, { hash: string; memories: Message[] }>>()
+        .default(new Map()),
+    }),
+  )
   // Intercept the 'agent.resources-response' from core plugin
   .addInterceptor(
     "intercept-core-resources-response",

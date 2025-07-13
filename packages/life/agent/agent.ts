@@ -1,3 +1,4 @@
+import { isSameType } from "zod-compare";
 import { type EOUProvider, eouProviders } from "@/models/eou";
 import { type LLMProvider, llmProviders } from "@/models/llm";
 import { type STTProvider, sttProviders } from "@/models/stt";
@@ -6,7 +7,6 @@ import { type VADProvider, vadProviders } from "@/models/vad";
 import type { PluginDefinition } from "@/plugins/definition";
 import { PluginRunner } from "@/plugins/runner";
 import { type ServerTransportProvider, serverTransportProviders } from "@/transport/index.server";
-import { isSameType } from "zod-compare";
 import type { AgentDefinition } from "./definition";
 
 export class Agent {
@@ -31,7 +31,7 @@ export class Agent {
     this.transport.joinRoom("room-1").then(() => {
       // TMP: Expose say() via RPC
       this.transport.receiveObject("rpc-say", (data) => {
-        // @ts-ignore
+        // @ts-expect-error
         this.plugins.core.say(data);
       });
     });
@@ -149,13 +149,13 @@ export class Agent {
     console.log("Stopping agent...");
 
     // Stop all plugins
-    for (const [pluginId, plugin] of Object.entries(this.plugins)) {
-      try {
-        await plugin.stop();
-      } catch (error) {
-        console.error(`Error stopping plugin ${pluginId}:`, error);
-      }
-    }
+    await Promise.all(
+      Object.entries(this.plugins).map(([pluginId, plugin]) => {
+        return plugin.stop().catch((error) => {
+          console.error(`Error stopping plugin ${pluginId}:`, error);
+        });
+      }),
+    );
 
     // Disconnect transport
     if (this.transport.isConnected) {

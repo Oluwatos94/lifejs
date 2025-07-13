@@ -1,6 +1,6 @@
+import { z } from "zod";
 import { History } from "@/agent/history";
 import {
-  type Message,
   createMessageInputSchema,
   messageSchema,
   resourcesSchema,
@@ -14,7 +14,6 @@ import { klona } from "@/shared/klona";
 import { RollingBuffer } from "@/shared/rolling-buffer";
 import { serialize } from "@/shared/serialize";
 import { stableDeepEqual } from "@/shared/stable-deep-equal";
-import { z } from "zod";
 import { definePlugin } from "../definition";
 import { GenerationOrchestrator } from "./generation/orchestrator";
 
@@ -75,11 +74,19 @@ export const corePlugin = definePlugin("core")
         .default({}),
     }),
   )
-  .context({
-    messages: [] as Message[],
-    status: { listening: true as boolean, thinking: false as boolean, speaking: false as boolean },
-    voiceEnabled: true as boolean,
-  })
+  .context(
+    z.object({
+      messages: z.array(messageSchema).default([]),
+      status: z
+        .object({
+          listening: z.boolean().default(true),
+          thinking: z.boolean().default(false),
+          speaking: z.boolean().default(false),
+        })
+        .default({}),
+      voiceEnabled: z.boolean().default(true),
+    }),
+  )
   .events({
     "messages.create": { dataSchema: createMessageInputSchema },
     "messages.update": { dataSchema: updateMessageInputSchema },
@@ -317,7 +324,7 @@ export const corePlugin = definePlugin("core")
     }
   })
   // 3. Listen for incoming audio chunks coming from the WebRTC room
-  .addService("incoming-audio", async ({ agent, emit }) => {
+  .addService("incoming-audio", ({ agent, emit }) => {
     agent.transport.on("audio-chunk", (event) => {
       emit({ type: "user.audio-chunk", data: { audioChunk: event.chunk } });
     });
@@ -425,7 +432,7 @@ export const corePlugin = definePlugin("core")
           const duration = audioChunkToMs(event.data.audioChunk);
           voiceChunksWindow.push({
             timestamp: Date.now(),
-            duration: duration,
+            duration,
           });
         }
 
@@ -534,39 +541,41 @@ export const corePlugin = definePlugin("core")
   .addEffect("handle-tools", async ({ event, emit, config, methods }) => {
     if (event.type !== "agent.tool-requests") return;
 
-    for (const request of event.data) {
-      const tool = config.tools.find((tool) => tool.name === request.name);
-      if (!tool) throw new Error(`Tool with id "${request.name}" not found.`);
+    await Promise.all(
+      event.data.map(async (request) => {
+        const tool = config.tools.find((t) => t.name === request.name);
+        if (!tool) throw new Error(`Tool with id "${request.name}" not found.`);
 
-      try {
-        const result = await tool.run(request.input);
-        emit({
-          type: "agent.tool-response",
-          data: {
-            result: {
-              toolId: request.id,
-              toolSuccess: result.success,
-              toolOutput: result.output,
+        try {
+          const result = await tool.run(request.input);
+          emit({
+            type: "agent.tool-response",
+            data: {
+              result: {
+                toolId: request.id,
+                toolSuccess: result.success,
+                toolOutput: result.output,
+              },
             },
-          },
-          urgent: true,
-        });
-      } catch (error) {
-        emit({
-          type: "agent.tool-response",
-          data: {
-            result: {
-              toolId: request.id,
-              toolSuccess: false,
-              toolError: serialize(error as Error),
+            urgent: true,
+          });
+        } catch (error) {
+          emit({
+            type: "agent.tool-response",
+            data: {
+              result: {
+                toolId: request.id,
+                toolSuccess: false,
+                toolError: serialize(error as Error),
+              },
             },
-          },
-          urgent: true,
-        });
-      }
+            urgent: true,
+          });
+        }
 
-      methods.continue({ interrupt: "abrupt" });
-    }
+        methods.continue({ interrupt: "abrupt" });
+      }),
+    );
   })
   // 10. Stream agent speech to the user
   .addService("outgoing-audio", async ({ queue, agent }) => {
