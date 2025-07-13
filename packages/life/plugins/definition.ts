@@ -128,6 +128,7 @@ export type PluginLifecycle<
   onError?: (params: {
     config: PluginConfig<ConfigDef, "output">;
     context: WritablePluginContext<PluginContext<ContextDef, "output">>;
+    error: unknown;
   }) => void;
 };
 

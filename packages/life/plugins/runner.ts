@@ -18,6 +18,7 @@ import { AsyncQueue } from "@/shared/async-queue";
 import { klona } from "@/shared/klona";
 import { newId } from "@/shared/prefixed-id";
 import type { SerializableValue } from "@/shared/serialize";
+import { stableObjectSHA256 } from "@/shared/stable-sha256";
 
 type PluginExternalInterceptor<TDefinition extends PluginDefinition = PluginDefinition> = {
   runner: PluginRunner<TDefinition>;
@@ -76,9 +77,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     const runner = this;
     return new Proxy({} as ReadonlyPluginContext<PluginContext<Definition["context"], "output">>, {
       get(_, prop) {
-        if (prop === "onChange") {
-          return runner.#onChange.bind(runner);
-        }
+        if (prop === "onChange") return runner.#onContextChange.bind(runner);
         // Always return fresh value from current context
         return runner.#context[prop as keyof PluginContext<Definition["context"], "output">];
       },
@@ -93,7 +92,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     const runner = this;
     return new Proxy({} as WritablePluginContext<PluginContext<Definition["context"], "output">>, {
       get(_, prop) {
-        if (prop === "onChange") return runner.#onChange.bind(runner);
+        if (prop === "onChange") return runner.#onContextChange.bind(runner);
         if (prop === "set") return runner.#setContext.bind(runner);
         return runner.#context[prop as keyof PluginContext<Definition["context"], "output">];
       },
@@ -125,11 +124,11 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     this.#context[key] = klona(newKeyValue);
 
     // Notify listeners
-    this.#notifyListeners(oldValue);
+    this.#notifyContextListeners(oldValue);
   }
 
   // Subscribe to context changes
-  #onChange<R extends SerializableValue>(
+  #onContextChange<R extends SerializableValue>(
     selector: (context: PluginContext<Definition["context"], "output">) => R,
     callback: (newValue: R, oldValue: R) => void,
   ): () => void {
@@ -148,15 +147,33 @@ export class PluginRunner<const Definition extends PluginDefinition> {
   }
 
   // Notify all listeners
-  #notifyListeners(oldValue: PluginContext<Definition["context"], "output">): void {
+  #notifyContextListeners(oldContext: PluginContext<Definition["context"], "output">): void {
     for (const listener of this.#contextListeners) {
       const newSelectedValue = listener.selector(this.#context);
-      const oldSelectedValue = listener.selector(oldValue);
+      const oldSelectedValue = listener.selector(oldContext);
 
       // Only call if value actually changed
-      if (newSelectedValue !== oldSelectedValue) {
+      if (stableObjectSHA256(newSelectedValue) !== stableObjectSHA256(oldSelectedValue)) {
         listener.callback(newSelectedValue, oldSelectedValue);
         listener.lastValue = newSelectedValue;
+      }
+    }
+  }
+
+  // Helper method to call onError lifecycle hook
+  async #callOnErrorHook(error: unknown): Promise<void> {
+    if (this.#definition.lifecycle?.onError) {
+      try {
+        await this.#definition.lifecycle.onError({
+          config: this.#config,
+          context: this.#createWritableContext(),
+          error,
+        });
+      } catch (errorHandlerError) {
+        console.error(
+          `Error in onError lifecycle hook for plugin ${this.#definition.name}:`,
+          errorHandlerError,
+        );
       }
     }
   }
@@ -244,53 +261,78 @@ export class PluginRunner<const Definition extends PluginDefinition> {
   }
 
   async start() {
-    for await (let event of this.#queue) {
-      if (
-        event.type !== "user.audio-chunk" &&
-        event.type !== "user.voice-chunk" &&
-        event.type !== "agent.voice-chunk"
-      )
-        console.log("🐳", event);
-
-      // 1. Run external interceptors
-      let isDropped = false;
-      for (const { interceptor, runner } of this.#externalInterceptors) {
-        const drop = (_reason: string) => (isDropped = true);
-        const next = (newEvent: PluginEvent<PluginEventsDefinition, "output">) => {
-          event = newEvent;
-        };
-        // biome-ignore lint/nursery/noAwaitInLoop: sequential execution expected here
-        await interceptor({
-          config: runner.#config,
-          context: runner.#createReadonlyContext(),
-          emit: runner.emit.bind(runner),
-          dependencyName: this.#definition.name,
-          event,
-          drop,
-          next,
-        });
-        if (isDropped) break;
-      }
-      if (isDropped) continue;
-
-      // 2. Run effects
-      const dependencies = this.#buildDependencies();
-      for (const effect of Object.values(this.#definition.effects ?? {})) {
-        // biome-ignore lint/nursery/noAwaitInLoop: sequential execution expected here
-        await effect({
-          agent: this.#agent,
-          event: klona(event),
+    // Run start lifecycle hook
+    if (this.#definition.lifecycle?.onStart) {
+      try {
+        await this.#definition.lifecycle.onStart({
           config: this.#config,
           context: this.#createWritableContext(),
-          methods: this.#finalMethods,
-          emit: this.emit.bind(this) as EmitFunction<Definition["events"]>,
-          dependencies,
         });
+      } catch (error) {
+        console.error(
+          `Error in onStart lifecycle hook for plugin ${this.#definition.name}:`,
+          error,
+        );
+        // Call onError hook if it exists
+        await this.#callOnErrorHook(error);
+        throw error;
       }
+    }
 
-      // 2. Feed services' queues
-      for (const queue of this.#servicesQueues) {
-        queue.push(klona(event));
+    // Run the queue
+    for await (let event of this.#queue) {
+      try {
+        if (
+          event.type !== "user.audio-chunk" &&
+          event.type !== "user.voice-chunk" &&
+          event.type !== "agent.voice-chunk"
+        )
+          console.log("🐳", event);
+
+        // 1. Run external interceptors
+        let isDropped = false;
+        for (const { interceptor, runner } of this.#externalInterceptors) {
+          const drop = (_reason: string) => (isDropped = true);
+          const next = (newEvent: PluginEvent<PluginEventsDefinition, "output">) => {
+            event = newEvent;
+          };
+          // biome-ignore lint/nursery/noAwaitInLoop: sequential execution expected here
+          await interceptor({
+            config: runner.#config,
+            context: runner.#createReadonlyContext(),
+            emit: runner.emit.bind(runner),
+            dependencyName: this.#definition.name,
+            event,
+            drop,
+            next,
+          });
+          if (isDropped) break;
+        }
+        if (isDropped) continue;
+
+        // 2. Run effects
+        const dependencies = this.#buildDependencies();
+        for (const effect of Object.values(this.#definition.effects ?? {})) {
+          // biome-ignore lint/nursery/noAwaitInLoop: sequential execution expected here
+          await effect({
+            agent: this.#agent,
+            event: klona(event),
+            config: this.#config,
+            context: this.#createWritableContext(),
+            methods: this.#finalMethods,
+            emit: this.emit.bind(this) as EmitFunction<Definition["events"]>,
+            dependencies,
+          });
+        }
+
+        // 2. Feed services' queues
+        for (const queue of this.#servicesQueues) {
+          queue.push(klona(event));
+        }
+      } catch (error) {
+        console.error(`Error processing event in plugin ${this.#definition.name}:`, error);
+        // Call onError hook if it exists
+        await this.#callOnErrorHook(error);
       }
     }
   }
@@ -300,6 +342,19 @@ export class PluginRunner<const Definition extends PluginDefinition> {
   }
 
   async stop() {
-    //
+    // Run stop lifecycle hook
+    if (this.#definition.lifecycle?.onStop) {
+      try {
+        await this.#definition.lifecycle.onStop({
+          config: this.#config,
+          context: this.#createWritableContext(),
+        });
+      } catch (error) {
+        console.error(`Error in onStop lifecycle hook for plugin ${this.#definition.name}:`, error);
+        // Call onError hook if it exists
+        await this.#callOnErrorHook(error);
+        throw error;
+      }
+    }
   }
 }
