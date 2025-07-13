@@ -1,14 +1,47 @@
 {
   "name": "life",
   "version": "0.8.0",
+  "description": "Life.js is the first-ever fullstack framework to build agentic web applications. It is minimal, extensible, and typesafe. Well, everything you love.",
+  "author": "Lila Rest",
+  "license": "MIT+Services",
+  "homepage": "https://lifejs.org",
+  "bugs": {
+    "url": "https://github.com/lifejs/lifejs/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lifejs/lifejs"
+  },
+  "files": [
+    "dist/",
+    "package.json",
+    "README.md",
+    "LICENSE",
+    "LICENSE.SERVICES"
+  ],
+  "keywords": [
+    "react",
+    "framework",
+    "typescript",
+    "fullstack",
+    "agents",
+    "agentic"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "types": "tsc --noEmit --emitDeclarationOnly false",
-    "prepack": "cp ../../README.md README.md"
+    "prepack": "cp ../../README.md README.md && cp ../../LICENSE LICENSE && cp ../../LICENSE.SERVICES LICENSE.SERVICES"
   },
   "bin": {
-    "life": "./bin/cli.js"
+    "life": "./dist/cli.js"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "exports": {
     "./define": {
