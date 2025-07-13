@@ -16,7 +16,7 @@ async function main() {
       items: [
         defineMemory("instructions")
           .config({ behavior: "blocking" })
-          .getOutput(() => {
+          .output(() => {
             const history = new History([]);
             history.createMessage({
               role: "system",
@@ -26,7 +26,7 @@ async function main() {
           }),
         defineMemory("all-messages")
           .config({ behavior: "blocking" })
-          .getOutput(({ messages }) => messages),
+          .output(({ messages }) => messages),
       ],
     });
 

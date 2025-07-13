@@ -10,9 +10,9 @@ async function buildMemory(
   memory: MemoryDefinitionBuilder<MemoryDefinition>,
   messages: Message[],
 ): Promise<Message[]> {
-  const { getOutput } = memory._definition();
-  if (typeof getOutput === "function") return await getOutput({ messages });
-  return getOutput ?? [];
+  const { output } = memory._definition();
+  if (typeof output === "function") return await output({ messages });
+  return output ?? [];
 }
 
 export const memoriesPlugin = definePlugin("memories")

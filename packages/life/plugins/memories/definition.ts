@@ -24,7 +24,7 @@ export type MemoryConfig<T extends "input" | "output"> = T extends "input"
 export interface MemoryDefinition {
   name: string;
   config: MemoryConfig<"output">;
-  getOutput?: Message[] | ((params: { messages: Message[] }) => Message[] | Promise<Message[]>);
+  output?: Message[] | ((params: { messages: Message[] }) => Message[] | Promise<Message[]>);
   onHistoryChange?: (history: Message[]) => void;
   dependencies: MemoryDependenciesDefinition;
 }
@@ -52,13 +52,13 @@ export class MemoryDefinitionBuilder<const Definition extends MemoryDefinition> 
     });
   }
 
-  getOutput(
+  output(
     // biome-ignore lint/nursery/noShadow: expected here
     params: Message[] | ((params: { messages: Message[] }) => Message[] | Promise<Message[]>),
   ) {
     return new MemoryDefinitionBuilder({
       ...this.#def,
-      getOutput: params,
+      output: params,
     });
   }
 

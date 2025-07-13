@@ -45,7 +45,7 @@ const newsMemory = defineMemory("news")
   .onHistoryChange(async ({ messages }) => {
     await newsStore.pretech({ cacheId: new History(messages).getHash() });
   })
-  .getOutput(async ({ messages, stores }) => {
+  .output(async ({ messages, stores }) => {
     // Get the news from the store
     const news = await stores.get({ cacheId: new History(messages).getHash() }); // Blocking refetch (optional)
     // const news = stores.news.get();
@@ -76,7 +76,7 @@ export default defineAgent("demo")
       newsMemory,
       defineMemory("recent-messages")
         .config({ behavior: "blocking" })
-        .getOutput(({ messages }) => messages.slice(-10)),
+        .output(({ messages }) => messages.slice(-10)),
       defaults.memories.actions(),
       defaults.memories.percepts(),
     ],
