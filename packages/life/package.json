@@ -76,27 +76,42 @@
     }
   },
   "dependencies": {
-    "@cartesia/cartesia-js": "^2.2.5",
-    "@deepgram/sdk": "4.9.1",
     "@huggingface/transformers": "^3.6.3",
     "@inkjs/ui": "^2.0.0",
     "@livekit/protocol": "^1.39.3",
     "@livekit/rtc-node": "^0.13.17",
-    "@mistralai/mistralai": "^1.7.4",
     "@paralleldrive/cuid2": "^2.2.2",
     "@zenobius/ink-mouse": "^1.0.3",
     "livekit-client": "^2.15.2",
     "livekit-server-sdk": "^2.13.1",
     "onnxruntime-node": "^1.22.0-rev",
-    "openai": "^5.9.0",
     "react": "^19",
     "superjson": "^2.2.2",
     "to-words": "^4.7.0",
     "zod": "^3.25.58",
     "zod-to-json-schema": "^3.24.6"
   },
-  "peerDependencies": {},
   "devDependencies": {
     "tsup": "^8.5.0"
+  },
+  "peerDependencies": {
+    "@cartesia/cartesia-js": "^2.2.5",
+    "@deepgram/sdk": "4.9.1",
+    "@mistralai/mistralai": "^1.7.4",
+    "openai": "^5.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@cartesia/cartesia-js": {
+      "optional": true
+    },
+    "@deepgram/sdk": {
+      "optional": true
+    },
+    "@mistralai/mistralai": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    }
   }
 }
