@@ -1,5 +1,19 @@
 # life
 
+## 0.8.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [0672921](https://github.com/lifejs/lifejs/commit/06729210cc09f05447bb7491019aee5b993f810a) — Wire plugin lifecycle hooks in the plugin runner
+- [@LilaRest](https://github.com/LilaRest) in [1689ef2](https://github.com/lifejs/lifejs/commit/1689ef2cd69c545104cbcedd253363fd32d83c80) — Add set() method to plugin context and onChange() listeners
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [01e5ff9](https://github.com/lifejs/lifejs/commit/01e5ff9474feafba02fc4783494343db9df33630) — Solve context.onChange() not properly comparing object values
+- [@LilaRest](https://github.com/LilaRest) in [01e5ff9](https://github.com/lifejs/lifejs/commit/01e5ff9474feafba02fc4783494343db9df33630) — Refactor and simplify: equal, serialize, and sha256 libraries for consistency
+- [@LilaRest](https://github.com/LilaRest) in [5542020](https://github.com/lifejs/lifejs/commit/55420203782b39d59e012d81bbd98c7a12bff9a0) — Rename memory.getOutput() to memory.output()
+- [@LilaRest](https://github.com/LilaRest) in [a1b3964](https://github.com/lifejs/lifejs/commit/a1b3964b46b9e80361699b99887474dbc24d9b14) — TTS estimated transcript's tokenizer was broken because of regex hoisting
+
 ## 0.7.0
 
 ### Minor Changes
