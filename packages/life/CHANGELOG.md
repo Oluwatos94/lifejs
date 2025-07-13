@@ -1,5 +1,12 @@
 # life
 
+## 0.8.1
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [ca414d2](https://github.com/lifejs/lifejs/commit/ca414d2d81e341bb173a9fc28523abd36fcb3bce) — Cleanup bundle and package.json metadata
+- [@LilaRest](https://github.com/LilaRest) in [c8afe26](https://github.com/lifejs/lifejs/commit/c8afe263a4c558364017daa73b6d6a318eea7e17) — Make peer dependencies optional
+
 ## 0.8.0
 
 ### Minor Changes
