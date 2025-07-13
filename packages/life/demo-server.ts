@@ -5,7 +5,7 @@ import { defaults, defineAgent, defineMemory } from "./exports/define";
 
 async function main() {
   const builder = defineAgent("demo")
-    .plugins([...defaults.pluginsList])
+    .plugins([...defaults.plugins])
     .config({
       transport: {
         provider: "livekit",

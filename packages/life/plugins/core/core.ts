@@ -224,22 +224,24 @@ export const corePlugin = definePlugin("core")
       run: ({ emit }, params) => emit({ type: "agent.interrupt", data: params, urgent: true }),
     },
   })
+  .lifecycle({
+    onStart: ({ context }) => {
+      context.onChange(
+        (ctx) => ctx.status,
+        (newStatus) => console.log("💬", newStatus),
+      );
+    },
+  })
   // 1. Handle agent' status changes
   .addEffect("handle-status", ({ event, context }) => {
-    const statusBefore = klona(context.status);
     if (event.type === "agent.thinking-start") {
-      context.status.listening = false;
-      context.status.thinking = true;
+      context.set("status", (prev) => ({ ...prev, listening: false, thinking: true }));
     } else if (event.type === "agent.thinking-end") {
-      context.status.thinking = false;
+      context.set("status", (prev) => ({ ...prev, thinking: false }));
     } else if (event.type === "agent.speaking-end")
-      context.status = { listening: true, thinking: false, speaking: false };
+      context.set("status", { listening: true, thinking: false, speaking: false });
     else if (event.type === "agent.speaking-start") {
-      context.status.listening = false;
-      context.status.speaking = true;
-    }
-    if (!stableDeepEqual(statusBefore, context.status)) {
-      console.log("💬", context.status);
+      context.set("status", (prev) => ({ ...prev, listening: false, speaking: true }));
     }
   })
   // 2. Maintain messages history
@@ -309,7 +311,7 @@ export const corePlugin = definePlugin("core")
     }
 
     // Save the modified messages array
-    context.messages = history.getMessages();
+    context.set("messages", history.getMessages());
 
     if (!stableDeepEqual(context.messages, _initialMessages)) {
       // console.log(
@@ -331,7 +333,7 @@ export const corePlugin = definePlugin("core")
     return new Promise((resolve) => process.once("SIGINT", () => resolve()));
   })
   // 4. Use VAD model to detect voice activity
-  .addService("detect-voice", async ({ queue, agent, emit, methods, config }) => {
+  .addService("detect-voice", async ({ queue, agent, emit, methods, config, context }) => {
     const SCORE_IN_THRESHOLD = config.voiceDetection.scoreInThreshold;
     const SCORE_OUT_THRESHOLD = config.voiceDetection.scoreOutThreshold;
     const PRE_PADDING_CHUNKS = config.voiceDetection.prePaddingChunks;
@@ -358,7 +360,7 @@ export const corePlugin = definePlugin("core")
     };
 
     // Listen to user audio chunks
-    for await (const { event, context } of queue) {
+    for await (const event of queue) {
       if (event.type !== "user.audio-chunk") continue;
 
       // Helper method to emit a voice chunk
@@ -463,13 +465,13 @@ export const corePlugin = definePlugin("core")
     })();
 
     // Push voice chunks to the STT model
-    for await (const { event } of queue) {
+    for await (const event of queue) {
       if (event.type !== "user.voice-chunk") continue;
       sttJob.pushVoice(event.data.voiceChunk);
     }
   })
   // 6. Use EOU model to detect user's end of turn
-  .addService("detect-end-of-turn", async ({ queue, agent, methods, config }) => {
+  .addService("detect-end-of-turn", async ({ queue, agent, methods, config, context }) => {
     const END_OF_TURN_THRESHOLD = config.endOfTurnDetection.threshold;
     const MAX_TIMEOUT_MS = config.endOfTurnDetection.maxTimeoutMs;
     const MIN_TIMEOUT_MS = config.endOfTurnDetection.minTimeoutMs;
@@ -491,7 +493,7 @@ export const corePlugin = definePlugin("core")
       lastMessageBuffer = "";
     };
 
-    for await (const { event, context } of queue) {
+    for await (const event of queue) {
       if (!context.status.listening) continue;
 
       // Handle voice related events and text chunks
@@ -579,7 +581,7 @@ export const corePlugin = definePlugin("core")
   })
   // 10. Stream agent speech to the user
   .addService("outgoing-audio", async ({ queue, agent }) => {
-    for await (const { event } of queue) {
+    for await (const event of queue) {
       if (event.type !== "agent.voice-chunk") continue;
       agent.transport.streamAudioChunk(event.data.voiceChunk);
     }

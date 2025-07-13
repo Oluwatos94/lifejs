@@ -11,6 +11,9 @@ export const defaults = {
     core: corePlugin,
     memories: memoriesPlugin,
     stores: storesPlugin,
+    // Allows defaults to be used as an iterable, e.g., [...defaults.plugins]
+    *[Symbol.iterator]() {
+      for (const entry of Object.values(this)) yield entry;
+    },
   },
-  pluginsList: [corePlugin, memoriesPlugin, storesPlugin],
 } as const;

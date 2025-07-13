@@ -56,6 +56,18 @@ export type PluginContext<
   T extends "input" | "output",
 > = T extends "input" ? z.input<Def> : z.output<Def>;
 
+// Context API types
+export type ReadonlyPluginContext<T> = Readonly<T> & {
+  onChange<R>(
+    selector: (context: T) => R,
+    callback: (newValue: R, oldValue: R) => void,
+  ): () => void; // Returns unsubscribe function
+};
+
+export type WritablePluginContext<T> = ReadonlyPluginContext<T> & {
+  set<K extends keyof T>(key: K, valueOrUpdater: T[K] | ((prev: T[K]) => T[K])): void;
+};
+
 // - Events
 export type PluginEventsDefinition = Record<string, { dataSchema?: z.Schema }>;
 export type PluginEvent<EventsDef extends PluginEventsDefinition, T extends "input" | "output"> = {
@@ -107,15 +119,15 @@ export type PluginLifecycle<
 > = {
   onStart?: (params: {
     config: PluginConfig<ConfigDef, "output">;
-    context: PluginContext<ContextDef, "output">;
+    context: WritablePluginContext<PluginContext<ContextDef, "output">>;
   }) => void;
   onStop?: (params: {
     config: PluginConfig<ConfigDef, "output">;
-    context: PluginContext<ContextDef, "output">;
+    context: WritablePluginContext<PluginContext<ContextDef, "output">>;
   }) => void;
   onError?: (params: {
     config: PluginConfig<ConfigDef, "output">;
-    context: PluginContext<ContextDef, "output">;
+    context: WritablePluginContext<PluginContext<ContextDef, "output">>;
   }) => void;
 };
 
@@ -130,7 +142,7 @@ export type PluginEffectFunction<
   event: PluginEvent<EventsDef, "output">;
   agent: Agent;
   config: PluginConfig<ConfigDef, "output">;
-  context: PluginContext<ContextDef, "output">;
+  context: WritablePluginContext<PluginContext<ContextDef, "output">>;
   methods: PluginMethods<MethodsDef>;
   dependencies: PluginDependencies<DependenciesDef>;
   emit: EmitFunction<EventsDef>;
@@ -144,12 +156,10 @@ export type PluginServiceFunction<
   ContextDef extends PluginContextDefinition,
   MethodsDef extends PluginMethodsDef | undefined,
 > = (params: {
-  queue: AsyncQueue<{
-    event: PluginEvent<EventsDef, "output">;
-    context: Readonly<PluginContext<ContextDef, "output">>;
-  }>;
+  queue: AsyncQueue<PluginEvent<EventsDef, "output">>;
   agent: Agent;
   config: PluginConfig<ConfigDef, "output">;
+  context: ReadonlyPluginContext<PluginContext<ContextDef, "output">>;
   methods: PluginMethods<MethodsDef>;
   dependencies: PluginDependencies<DependenciesDef>;
   emit: EmitFunction<EventsDef>;
@@ -165,7 +175,7 @@ export type PluginInterceptorFunction<
   dependencyName: keyof DependenciesDef;
   event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">;
   config: PluginConfig<ConfigDef, "output">;
-  context: Readonly<PluginContext<ContextDef, "output">>;
+  context: ReadonlyPluginContext<PluginContext<ContextDef, "output">>;
   emit: EmitFunction<EventsDef>;
   drop: (reason: string) => void;
   next: (event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">) => void;
@@ -368,7 +378,7 @@ export class PluginDefinitionBuilder<
       ...this._definition,
       lifecycle,
     }) as PluginDefinitionBuilder<
-      Definition & { lifecycle: LifecycleConfig },
+      Definition,
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,

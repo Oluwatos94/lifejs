@@ -11,10 +11,13 @@ import type {
   PluginEvent,
   PluginEventsDefinition,
   PluginInterceptorFunction,
+  ReadonlyPluginContext,
+  WritablePluginContext,
 } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
 import { klona } from "@/shared/klona";
 import { newId } from "@/shared/prefixed-id";
+import type { SerializableValue } from "@/shared/serialize";
 
 type PluginExternalInterceptor<TDefinition extends PluginDefinition = PluginDefinition> = {
   runner: PluginRunner<TDefinition>;
@@ -32,16 +35,18 @@ export class PluginRunner<const Definition extends PluginDefinition> {
   #definition: Definition;
   #config: PluginConfig<Definition["config"], "output">;
   #context: PluginContext<Definition["context"], "output">;
+  #contextListeners = new Set<{
+    selector: (context: PluginContext<Definition["context"], "output">) => SerializableValue;
+    callback: (newValue: SerializableValue, oldValue: SerializableValue) => void;
+    lastValue: SerializableValue;
+  }>();
   #externalInterceptors: PluginExternalInterceptor<PluginDefinition>[] = [];
-  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+  // biome-ignore lint/suspicious/noExplicitAny: we don't know the methods args types
   #finalMethods: Record<string, (...args: any[]) => unknown | Promise<unknown>> = {};
   #queue: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">> = new AsyncQueue<
     PluginEvent<PluginEventsDefinition, "output">
   >();
-  #servicesQueues: AsyncQueue<{
-    event: PluginEvent<PluginEventsDefinition, "output">;
-    context: Readonly<PluginContext<Definition["context"], "output">>;
-  }>[] = [];
+  #servicesQueues: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">>[] = [];
 
   constructor(agent: Agent, def: Definition, config: PluginConfig<Definition["config"], "output">) {
     this.#agent = agent;
@@ -53,7 +58,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
       const method = methodDef.run.bind(this, {
         agent: this.#agent,
         config: this.#config,
-        context: this.#context,
+        context: this.#createReadonlyContext(),
         emit: this.emit.bind(this) as EmitFunction,
       });
       this.#finalMethods[methodName] = method;
@@ -64,6 +69,96 @@ export class PluginRunner<const Definition extends PluginDefinition> {
 
   get methods() {
     return this.#finalMethods;
+  }
+
+  // Create read-only context with onChange (always returns fresh values)
+  #createReadonlyContext(): ReadonlyPluginContext<PluginContext<Definition["context"], "output">> {
+    const runner = this;
+    return new Proxy({} as ReadonlyPluginContext<PluginContext<Definition["context"], "output">>, {
+      get(_, prop) {
+        if (prop === "onChange") {
+          return runner.#onChange.bind(runner);
+        }
+        // Always return fresh value from current context
+        return runner.#context[prop as keyof PluginContext<Definition["context"], "output">];
+      },
+      set() {
+        throw new Error("Context is read-only. Use set() method in effects to modify context.");
+      },
+    });
+  }
+
+  // Create writable context for effects
+  #createWritableContext(): WritablePluginContext<PluginContext<Definition["context"], "output">> {
+    const runner = this;
+    return new Proxy({} as WritablePluginContext<PluginContext<Definition["context"], "output">>, {
+      get(_, prop) {
+        if (prop === "onChange") return runner.#onChange.bind(runner);
+        if (prop === "set") return runner.#setContext.bind(runner);
+        return runner.#context[prop as keyof PluginContext<Definition["context"], "output">];
+      },
+      set() {
+        throw new Error("Direct assignment not allowed. Use set() method to modify context.");
+      },
+    });
+  }
+
+  // Context setter
+  #setContext<K extends keyof PluginContext<Definition["context"], "output">>(
+    key: K,
+    valueOrUpdater:
+      | PluginContext<Definition["context"], "output">[K]
+      | ((
+          prev: PluginContext<Definition["context"], "output">[K],
+        ) => PluginContext<Definition["context"], "output">[K]),
+  ): void {
+    const oldValue = klona(this.#context);
+    const newKeyValue =
+      typeof valueOrUpdater === "function"
+        ? (
+            valueOrUpdater as (
+              prev: PluginContext<Definition["context"], "output">[K],
+            ) => PluginContext<Definition["context"], "output">[K]
+          )(this.#context[key])
+        : valueOrUpdater;
+
+    this.#context[key] = klona(newKeyValue);
+
+    // Notify listeners
+    this.#notifyListeners(oldValue);
+  }
+
+  // Subscribe to context changes
+  #onChange<R extends SerializableValue>(
+    selector: (context: PluginContext<Definition["context"], "output">) => R,
+    callback: (newValue: R, oldValue: R) => void,
+  ): () => void {
+    const listener = {
+      selector,
+      callback: callback as (newValue: SerializableValue, oldValue: SerializableValue) => void,
+      lastValue: selector(this.#context),
+    };
+
+    this.#contextListeners.add(listener);
+
+    // Return unsubscribe function
+    return () => {
+      this.#contextListeners.delete(listener);
+    };
+  }
+
+  // Notify all listeners
+  #notifyListeners(oldValue: PluginContext<Definition["context"], "output">): void {
+    for (const listener of this.#contextListeners) {
+      const newSelectedValue = listener.selector(this.#context);
+      const oldSelectedValue = listener.selector(oldValue);
+
+      // Only call if value actually changed
+      if (newSelectedValue !== oldSelectedValue) {
+        listener.callback(newSelectedValue, oldSelectedValue);
+        listener.lastValue = newSelectedValue;
+      }
+    }
   }
 
   #buildDependencies() {
@@ -77,7 +172,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
         events: depDef.events,
         methods: depRunner.methods,
         config: depRunner.#config,
-        context: depRunner.#context,
+        context: depRunner.#createReadonlyContext(),
         emit: depRunner.emit.bind(depRunner),
       };
     }
@@ -90,15 +185,17 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     const dependencies = this.#buildDependencies();
 
     for (const service of Object.values(this.#definition.services ?? {}) ?? []) {
-      const queue = new AsyncQueue<{
-        event: PluginEvent<PluginEventsDefinition, "output">;
-        context: Readonly<PluginContext<Definition["context"], "output">>;
-      }>();
+      const queue = new AsyncQueue<PluginEvent<PluginEventsDefinition, "output">>();
       this.#servicesQueues.push(queue);
+
+      // Create a single readonly context that always returns fresh values
+      const readonlyContext = this.#createReadonlyContext();
+
       service({
         agent: this.#agent,
         queue: queue[Symbol.asyncIterator](),
         config: this.#config,
+        context: readonlyContext,
         methods: this.#finalMethods,
         emit: this.emit.bind(this) as EmitFunction,
         dependencies,
@@ -165,7 +262,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
         // biome-ignore lint/nursery/noAwaitInLoop: sequential execution expected here
         await interceptor({
           config: runner.#config,
-          context: runner.#context,
+          context: runner.#createReadonlyContext(),
           emit: runner.emit.bind(runner),
           dependencyName: this.#definition.name,
           event,
@@ -184,7 +281,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
           agent: this.#agent,
           event: klona(event),
           config: this.#config,
-          context: this.#context,
+          context: this.#createWritableContext(),
           methods: this.#finalMethods,
           emit: this.emit.bind(this) as EmitFunction<Definition["events"]>,
           dependencies,
@@ -193,10 +290,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
 
       // 2. Feed services' queues
       for (const queue of this.#servicesQueues) {
-        queue.push({
-          event: klona(event),
-          context: klona(this.#context),
-        });
+        queue.push(klona(event));
       }
     }
   }

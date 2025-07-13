@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Agent } from "@/agent/agent";
 import type { Resources } from "@/agent/resources";
-import type { EmitFunction, PluginEvent } from "@/plugins/definition";
+import type { EmitFunction, PluginEvent, ReadonlyPluginContext } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/prefixed-id";
 import type { corePlugin } from "../core";
@@ -12,8 +12,8 @@ type CoreContext = z.output<typeof corePlugin._definition.context>;
 export type CoreParams = {
   agent: Agent;
   emit: EmitFunction<typeof corePlugin._definition.events>;
-  queue: AsyncQueue<{ event: CoreEvent; context: Readonly<CoreContext> }>;
-  context: CoreContext;
+  queue: AsyncQueue<CoreEvent>;
+  context: ReadonlyPluginContext<CoreContext>;
 };
 
 // Orchestrator
@@ -31,8 +31,8 @@ export class GenerationOrchestrator {
   #generationsResourcesRequestsIds: Record<string, string> = {};
   #resourcesResponses: Record<string, Resources> = {};
 
-  constructor(params: Omit<CoreParams, "context">) {
-    this.#core = params as CoreParams;
+  constructor(params: CoreParams) {
+    this.#core = params;
   }
 
   async start() {
@@ -40,10 +40,7 @@ export class GenerationOrchestrator {
     this.#consumeGenerations();
 
     // Start processing events
-    for await (const { event, context } of this.#core.queue) {
-      // Update the context
-      this.#core.context = context;
-
+    for await (const event of this.#core.queue) {
       // If this is a generation event, process it
       if (this.#isGenerationEvent(event)) await this.#processGenerationEvent(event);
     }
@@ -257,7 +254,7 @@ export class GenerationOrchestrator {
   }
 
   #isQueueBusy() {
-    return this.#core.queue.some(({ event }) => this.#isGenerationEvent(event));
+    return this.#core.queue.some((event) => this.#isGenerationEvent(event));
   }
 
   async #consumeGenerations() {

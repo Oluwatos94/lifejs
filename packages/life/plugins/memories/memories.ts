@@ -36,6 +36,12 @@ export const memoriesPlugin = definePlugin("memories")
         timestamp: z.number(),
       }),
     },
+    "cache-update": {
+      dataSchema: z.object({
+        messagesHash: z.string(),
+        memories: z.array(messageSchema),
+      }),
+    },
   })
   .context(
     z.object({
@@ -66,7 +72,7 @@ export const memoriesPlugin = definePlugin("memories")
 
   // Build non-blocking memories when build-request is received
   .addService("build-non-blocking-memories", async ({ config, emit, queue }) => {
-    for await (const { event } of queue) {
+    for await (const event of queue) {
       if (event.type !== "build-request") continue;
 
       const timestamp = Date.now();
@@ -89,8 +95,8 @@ export const memoriesPlugin = definePlugin("memories")
   })
 
   // Build memories messages and emit build response
-  .addService("build-memories", async ({ config, emit, queue }) => {
-    for await (const { event, context } of queue) {
+  .addService("build-memories", async ({ config, emit, queue, context }) => {
+    for await (const event of queue) {
       if (event.type !== "build-request") continue;
 
       // Compute hash of input messages to check cache
@@ -146,10 +152,10 @@ export const memoriesPlugin = definePlugin("memories")
         }
       }
 
-      // Store the computed memories in cache
-      context.computedMemoriesCache.set(messagesHash, {
-        hash: messagesHash,
-        memories: memoriesMessages,
+      // Emit cache update event
+      emit({
+        type: "cache-update",
+        data: { messagesHash, memories: memoriesMessages },
       });
 
       // Re-emit the resources response with the memories messages
@@ -168,15 +174,40 @@ export const memoriesPlugin = definePlugin("memories")
 
     const currentTimestamp = context.memoriesLastTimestamp.get(event.data.name) ?? 0;
     if (event.data.timestamp >= currentTimestamp) {
-      context.memoriesLastResults.set(event.data.name, event.data.messages);
-      context.memoriesLastTimestamp.set(event.data.name, event.data.timestamp);
+      context.set("memoriesLastResults", (prev) => {
+        const newMap = new Map(prev);
+        newMap.set(event.data.name, event.data.messages);
+        return newMap;
+      });
+      context.set("memoriesLastTimestamp", (prev) => {
+        const newMap = new Map(prev);
+        newMap.set(event.data.name, event.data.timestamp);
+        return newMap;
+      });
     }
+  })
+  // Update the computed memories cache
+  .addEffect("update-cache", ({ event, context }) => {
+    if (event.type !== "cache-update") return;
+    
+    context.set("computedMemoriesCache", (prev) => {
+      const newMap = new Map(prev);
+      newMap.set(event.data.messagesHash, {
+        hash: event.data.messagesHash,
+        memories: event.data.memories,
+      });
+      return newMap;
+    });
   })
   // Re-emit the build-response event
   .addEffect("re-emit-build-response", ({ event, dependencies, context }) => {
     if (event.type !== "build-response") return;
     // Add the request id to the processed requests ids
-    context.processedRequestsIds.add(event.data.requestId);
+    context.set("processedRequestsIds", (prev) => {
+      const newSet = new Set(prev);
+      newSet.add(event.data.requestId);
+      return newSet;
+    });
     // Re-emit the resources response event
     // dependencies.core.context.
 

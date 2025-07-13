@@ -4,7 +4,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "types": "tsc --noEmit --emitDeclarationOnly false"
+    "types": "tsc --noEmit --emitDeclarationOnly false",
+    "prepack": "cp ../../README.md README.md"
   },
   "bin": {
     "life": "./bin/cli.js"

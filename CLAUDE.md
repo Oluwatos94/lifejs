@@ -55,14 +55,17 @@ Here is an overview of its sub-folders:
 ## Development Guidelines
 
 ### Code Style
-- TypeScript for all code
+- TypeScript for all code, avoid @ts-ignore and `any` whenever possible
+- Make sure changes / additions are consistent with the existing code around it
+- Be surgical, minimal and precise in your changes
+- Never drop any existing feature or behavior because it is incompatible with some changes you performed. If adapting that part is heavy and you're unsure, ask the user, else adapt the now incompatible part.
 - Use interfaces over types whenever possible
 - Avoid enums, use const maps
 - Prefer functional and declarative patterns
 - Use early returns for readability
 - Named exports for components
 - Descriptive naming with auxiliary verbs (isLoading, hasError)
-- Event handlers prefixed with "handle"
+- Event handlers prefixed with "handle" or "process"
 
 ### File Organization
 - Components: exports, subcomponents, helpers, types
@@ -72,6 +75,6 @@ Here is an overview of its sub-folders:
 ### Test your changes
 Before concluding that a performed change is working, write a minimal temporary test file to test that your changes are working as expected.
 
-### Writing Tips
+### Answers Tips
 - Keep your answer minimal and dense, still easy to read quickly
 - Consider introducing a TL;DR at the top or bottom of complex explanations
