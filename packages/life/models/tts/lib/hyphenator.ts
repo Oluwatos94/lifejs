@@ -1,11 +1,7 @@
 // Copyright 2024 LiveKit, Inc.
 // Taken from https://github.com/livekit/agents-js/blob/544353f7ec38b0f0f8837a7ae2e5d6ecf2176ee6/agents/src/tokenize/basic/hyphenator.ts
 
-// Top-level regex patterns
-const WHITESPACE_PATTERN = /\s+/;
-const HYPHEN_PATTERN = /-/g;
-const DIGIT_PATTERN = /[0-9]/g;
-const LETTER_DOT_PATTERN = /[.a-z]/;
+// biome-ignore-start lint/performance/useTopLevelRegex: hoisting regexes led to the tokenize to break, we'll keep them inline for now until this becames a performance issue
 
 const END = Symbol("END");
 interface Tree {
@@ -23,19 +19,19 @@ export class Hyphenator {
     this.tree = {};
     this.exceptions = {};
 
-    for (const pattern of patterns.split(WHITESPACE_PATTERN)) {
+    for (const pattern of patterns.split(/\s+/)) {
       this.#insertPattern(pattern);
     }
 
-    for (const exception of exceptions.split(WHITESPACE_PATTERN)) {
+    for (const exception of exceptions.split(/\s+/)) {
       const points = [0, ...Array.from(exception).map((c) => (c === "-" ? 1 : 0))];
-      this.exceptions[exception.replace(HYPHEN_PATTERN, "")] = points;
+      this.exceptions[exception.replace(/-/g, "")] = points;
     }
   }
 
   #insertPattern(pattern: string) {
-    const chars = pattern.replaceAll(DIGIT_PATTERN, "");
-    const points = pattern.split(LETTER_DOT_PATTERN).map((d) => Number.parseInt(d || "0", 10));
+    const chars = pattern.replaceAll(/[0-9]/g, "");
+    const points = pattern.split(/[.a-z]/).map((d) => Number.parseInt(d || "0", 10));
 
     let node = this.tree;
     for (const char of chars) {
@@ -441,3 +437,5 @@ const EXCEPTIONS = `as-so-ciate as-so-ciates dec-li-na-tion oblig-a-tory phil-an
   presents project projects reci-procity re-cog-ni-zance ref-or-ma-tion ret-ri-bu-tion ta-ble`;
 
 export const hyphenator = new Hyphenator(PATTERNS, EXCEPTIONS);
+
+// biome-ignore-end lint/performance/useTopLevelRegex: reason

@@ -120,16 +120,16 @@ export type PluginLifecycle<
   onStart?: (params: {
     config: PluginConfig<ConfigDef, "output">;
     context: WritablePluginContext<PluginContext<ContextDef, "output">>;
-  }) => void;
+  }) => void | Promise<void>;
   onStop?: (params: {
     config: PluginConfig<ConfigDef, "output">;
     context: WritablePluginContext<PluginContext<ContextDef, "output">>;
-  }) => void;
+  }) => void | Promise<void>;
   onError?: (params: {
     config: PluginConfig<ConfigDef, "output">;
     context: WritablePluginContext<PluginContext<ContextDef, "output">>;
     error: unknown;
-  }) => void;
+  }) => void | Promise<void>;
 };
 
 // - Effects

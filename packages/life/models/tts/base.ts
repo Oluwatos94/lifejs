@@ -103,6 +103,11 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
               chunk.textChunk = newTaken.startsWith(alreadyTaken)
                 ? newTaken.slice(alreadyTaken.length)
                 : newTaken;
+              console.log(
+                `TRANSCRIPT; Pace: ${jobPace}ms, Total: ${totalVoiceDurationMs}ms; New Raw: ${newTaken}, New: ${
+                  newTaken.startsWith(alreadyTaken) ? newTaken.slice(alreadyTaken.length) : newTaken
+                }, Already: ${alreadyTaken}`,
+              );
               this.#jobsTakenText[jobId] = newTaken;
             }
 

@@ -16,14 +16,8 @@ import { hyphenator } from "./hyphenator";
  * corresponding text chunks.
  */
 
-// Top-level regex patterns
-const ESCAPE_PATTERN = /[-/\\^$*+?.()|[\]{}]/g;
-const NON_BLANK_PATTERN = /\S+/g;
-const ALL_DIGITS_PATTERN = /^\d+$/;
-const WHITESPACE_PATTERN = /\s+/;
-
 const toWords = new ToWords({ localeCode: "en-US" });
-const esc = (c: string) => c.replace(ESCAPE_PATTERN, "\\$&");
+const esc = (c: string) => c.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
 
 // Punctuation leading to short pauses when spoken
 export const PAUSE_PUNCT = [
@@ -84,10 +78,11 @@ interface Chunk {
 const isSilenceChunk = (c: Chunk | null): c is Chunk =>
   !!c && c.chunk.length > 0 && SILENCE_SET.has(c.chunk[0] ?? "");
 
+// biome-ignore-start lint/performance/useTopLevelRegex: hoisting regexes led to the tokenize to break, we'll keep them inline for now until this becames a performance issue
 export class SpokenTextTokenizer {
   /* ────────── core iterator ────────── */
   private *iter(text: string): Generator<Chunk> {
-    const nonBlank = NON_BLANK_PATTERN;
+    const nonBlank = /\S+/g;
     let m: RegExpExecArray | null;
     let last: Chunk | null = null;
 
@@ -145,11 +140,8 @@ export class SpokenTextTokenizer {
 
       /* emit the main word / number, hyphenated */
       if (token) {
-        if (ALL_DIGITS_PATTERN.test(token)) {
-          for (const w of toWords
-            .convert(Number(token))
-            .replace(/-/g, " ")
-            .split(WHITESPACE_PATTERN))
+        if (/^\d+$/.test(token)) {
+          for (const w of toWords.convert(Number(token)).replace(/-/g, " ").split(/\s+/))
             for (const p of hyphenator.hyphenateWord(w)) {
               const c = { chunk: p, start: pos, end: pos };
               yield c;
@@ -195,7 +187,7 @@ export class SpokenTextTokenizer {
   }
   private *emitExpanded(mark: string, at: number, save: (c: Chunk) => void): Generator<Chunk> {
     // biome-ignore lint/style/noNonNullAssertion: <explanation>
-    for (const w of SPOKEN_PUNCT[mark]!.split(WHITESPACE_PATTERN))
+    for (const w of SPOKEN_PUNCT[mark]!.split(/\s+/))
       for (const p of hyphenator.hyphenateWord(w)) {
         const c = { chunk: p, start: at, end: at + mark.length };
         save(c);
@@ -225,3 +217,5 @@ export class SpokenTextTokenizer {
 }
 
 export const tokenizer = new SpokenTextTokenizer();
+
+// biome-ignore-end lint/performance/useTopLevelRegex: reason
