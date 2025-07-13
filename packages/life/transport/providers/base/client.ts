@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { deserialize, type SerializableValue, serialize } from "@/shared/serialize";
+import { deserialize, type SerializableValue, serialize } from "@/shared/stable-serialize";
 
 export type ClientTransportEvent = never;
 

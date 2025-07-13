@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type Message, messageSchema } from "@/agent/resources";
 import { definePlugin } from "@/plugins/definition";
-import { stableObjectSHA256 } from "@/shared/stable-sha256";
+import { sha256 } from "@/shared/stable-sha256";
 import { corePlugin } from "../core/core";
 import { type MemoryDefinition, MemoryDefinitionBuilder } from "./definition";
 
@@ -100,7 +100,7 @@ export const memoriesPlugin = definePlugin("memories")
       if (event.type !== "build-request") continue;
 
       // Compute hash of input messages to check cache
-      const messagesHash = await stableObjectSHA256({ messages: event.data.messages });
+      const messagesHash = await sha256({ messages: event.data.messages });
 
       // Check if we've already computed memories for these messages
       const cachedResult = context.computedMemoriesCache.get(messagesHash);
@@ -189,7 +189,7 @@ export const memoriesPlugin = definePlugin("memories")
   // Update the computed memories cache
   .addEffect("update-cache", ({ event, context }) => {
     if (event.type !== "cache-update") return;
-    
+
     context.set("computedMemoriesCache", (prev) => {
       const newMap = new Map(prev);
       newMap.set(event.data.messagesHash, {

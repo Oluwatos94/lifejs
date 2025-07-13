@@ -12,8 +12,8 @@ import {
 import { audioChunkToMs } from "@/shared/audio-chunk-to-ms";
 import { klona } from "@/shared/klona";
 import { RollingBuffer } from "@/shared/rolling-buffer";
-import { serialize } from "@/shared/serialize";
-import { stableDeepEqual } from "@/shared/stable-deep-equal";
+import { equal } from "@/shared/stable-equal";
+import { serialize } from "@/shared/stable-serialize";
 import { definePlugin } from "../definition";
 import { GenerationOrchestrator } from "./generation/orchestrator";
 
@@ -313,7 +313,7 @@ export const corePlugin = definePlugin("core")
     // Save the modified messages array
     context.set("messages", history.getMessages());
 
-    if (!stableDeepEqual(context.messages, _initialMessages)) {
+    if (!equal(context.messages, _initialMessages)) {
       // console.log(
       //   "💬",
       //   context.messages.map((m) => {

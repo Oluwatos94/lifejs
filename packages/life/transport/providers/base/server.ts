@@ -1,5 +1,5 @@
 import { ensureServer } from "@/shared/ensure-server";
-import { deserialize, type SerializableValue, serialize } from "@/shared/serialize";
+import { deserialize, type SerializableValue, serialize } from "@/shared/stable-serialize";
 
 ensureServer("transport.server.Transport");
 

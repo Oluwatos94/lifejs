@@ -17,8 +17,8 @@ import type {
 import { AsyncQueue } from "@/shared/async-queue";
 import { klona } from "@/shared/klona";
 import { newId } from "@/shared/prefixed-id";
-import type { SerializableValue } from "@/shared/serialize";
-import { stableObjectSHA256 } from "@/shared/stable-sha256";
+import { equal } from "@/shared/stable-equal";
+import type { SerializableValue } from "@/shared/stable-serialize";
 
 type PluginExternalInterceptor<TDefinition extends PluginDefinition = PluginDefinition> = {
   runner: PluginRunner<TDefinition>;
@@ -153,7 +153,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
       const oldSelectedValue = listener.selector(oldContext);
 
       // Only call if value actually changed
-      if (stableObjectSHA256(newSelectedValue) !== stableObjectSHA256(oldSelectedValue)) {
+      if (!equal(newSelectedValue, oldSelectedValue)) {
         listener.callback(newSelectedValue, oldSelectedValue);
         listener.lastValue = newSelectedValue;
       }
