@@ -14,7 +14,9 @@
 <br/> 
 
 <div align="center">
-Life.js is the first-ever fullstack framework to build agentic web applications. Open-source, minimal, extensible, and typesafe. Well, everything you love. It has been specifically crafted for Typescript/React.
+Life.js is an open-source framework to build agentic apps, i.e., apps that can adapt to the users, perceive, and even act autonomously alongside them, while being interacted with via voice, text, or touch.
+
+It is minimal, extensible, and typesafe. Well, everything you love.
 </div>
 <br>
 <br>
@@ -30,5 +32,6 @@ Coming soon
 ## License
 Life.js is MIT-licensed unless you aim to be the “Vercel for Life.js”, which we plan to pioneer to fund Life.js' long-term development. This is a temporary measure to protect early efforts; we'll then transition to a plain MIT license. See [LICENSE](./LICENSE) and [LICENSE.SERVICE](./LICENSE.SERVICES).
 
-If you have any question regarding licensing, we have a dedicated channel [#license]() on Discord for that matter.
-Much love. Lila. 
+If you have any question regarding licensing, just ping any of the maintainers on Discord, or write to license@lifejs.org
+
+Much love.

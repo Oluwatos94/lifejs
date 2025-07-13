@@ -14,7 +14,9 @@
 <br/> 
 
 <div align="center">
-Life.js is the first-ever fullstack framework to build agentic web applications. Open-source, minimal, extensible, and typesafe. Well, everything you love. It has been specifically crafted for Typescript/React.
+Life.js is an open-source framework to build agentic apps, i.e., apps that can adapt to the users, perceive, and even act autonomously alongside them, while being interacted with via voice, text, or touch.
+
+It is minimal, extensible, and typesafe. Well, everything you love.
 </div>
 <br>
 <br>
@@ -28,20 +30,22 @@ Coming soon
 Coming soon
 
 ## Codebase overview
-- `life/compiler`: Compiles a Life.js project into a ready-to-run `.life/` folder.
-- `life/agent`: Runs and manages agents compiled in the `.life/` folder.
-- `life/transport`: Abstracts complex WebRTC/streaming logic behind a simple `Transport` class.
-- `life/models`: Offers a unified API for interacting with LLM, TTS, STT, and other AI models.
-- `life/plugins`: In Life.js everything is a plugin, even the core. This contains all native plugins.
-- `life/react`: Exposes React hooks and components built on top of `life/client`.
-- `life/client`: Allows interacting with a Life.js client from browser.
-- `life/shared`: Hosts shared utilities, types, and constants used across multiple packages.
-- `life/cli`: Comman-line interface to manage a Life.js project.
-- `life/storage` (coming soon): Offers a unified API for relational and vector database operations.
+- `agent/` — Provides agent definition (`defineAgent()`) and runner.
+- `transport/` — Abstracts complex WebRTC/streaming logic behind a simple `Transport` class.
+- `models/` — Offer a unified API to interact with various LLM/TTS/STT/EOU/VAD providers.
+- `config/` — Contains the schema of agents configuration used by global config (`life.config.ts` file) and local configs (defineAgent().config(...))
+- `plugins/` — In Life.js everything is a plugin, even the core. This contains all native plugins.
+- `client` — Provide a client to connect and interact with a Life.js agent.
+- `react` — Exposes React hooks and components built on top of `life/client`.
+- `shared/` — Shared utilities and helpers.
+- `cli/` — The `life` command-line interface used to run development server, build Life.js project, deploy, etc.
+- `storage` (coming soon) — Offers a unified API for relational and vector database operations.
+- `compiler` (coming soon) — Compiles a Life.js project into a ready-to-run `.life/` folder.
 
 
 ## License
 Life.js is MIT-licensed unless you aim to be the “Vercel for Life.js”, which we plan to pioneer to fund Life.js' long-term development. This is a temporary measure to protect early efforts; we'll then transition to a plain MIT license. See [LICENSE](./LICENSE) and [LICENSE.SERVICE](./LICENSE.SERVICES).
 
-If you have any question regarding licensing, we have a dedicated channel [#license]() on Discord for that matter.
-Much love. Lila. 
+If you have any question regarding licensing, just ping any of the maintainers on Discord, or write to license@lifejs.org
+
+Much love.
