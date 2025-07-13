@@ -1,5 +1,17 @@
 # life
 
+## 0.7.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [766b7a2](https://github.com/lifejs/lifejs/commit/766b7a2945b29033270597d22785b9e756071147) — Add a standardized serialization/deserialization library
+- [@LilaRest](https://github.com/LilaRest) in [4ccda6f](https://github.com/lifejs/lifejs/commit/4ccda6f88a4211f3bda85aac6f3653232a666b11) — Refactor plugin dependencies to unify them with the future items dependency and simplify the DX
+- [@LilaRest](https://github.com/LilaRest) in [55ed17e](https://github.com/lifejs/lifejs/commit/55ed17e236f54c6285bf062b5a188efa6ed43b63) — Make plugins' context definition bound to a Zod schema
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [55ed17e](https://github.com/lifejs/lifejs/commit/55ed17e236f54c6285bf062b5a188efa6ed43b63) — Bump dependencies + migrate to Biome v2
+
 ## 0.6.0
 
 ### Minor Changes
