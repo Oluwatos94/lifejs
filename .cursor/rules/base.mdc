@@ -40,12 +40,12 @@ Here is an overview of its sub-folders:
 - `models/` — Offer a unified API to interact with various LLM/TTS/STT/EOU/VAD providers.
 - `config/` — Contains the schema of agents configuration used by global config (`life.config.ts` file) and local configs (defineAgent().config(...))
 - `plugins/` — In Life.js everything is a plugin, even the core. This contains all native plugins.
-- `client` — Provide a client to connect and interact with a Life.js agent.
-- `react` — Exposes React hooks and components built on top of `life/client`.
+- `client/` — Provide a client to connect and interact with a Life.js agent.
+- `react/` — Exposes React hooks and components built on top of `life/client`.
 - `shared/` — Shared utilities and helpers.
 - `cli/` — The `life` command-line interface used to run development server, build Life.js project, deploy, etc.
-- `storage` (coming soon) — Offers a unified API for relational and vector database operations.
-- `compiler` (coming soon) — Compiles a Life.js project into a ready-to-run `.life/` folder.
+- `storage/` (coming soon) — Offers a unified API for relational and vector database operations.
+- `compiler/` (coming soon) — Compiles a Life.js project into a ready-to-run `.life/` folder.
 
 
 ## Stack
