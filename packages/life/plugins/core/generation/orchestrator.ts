@@ -50,7 +50,7 @@ export class GenerationOrchestrator {
     // Create the generation
     const generation = new Generation({
       agent: this.#core.agent,
-      voiceEnabled: this.#core.context.voiceEnabled,
+      voiceEnabled: this.#core.context.get().voiceEnabled,
     });
     this.#generations.push(generation);
 
@@ -58,7 +58,7 @@ export class GenerationOrchestrator {
     generation.onStatusChange(() => {
       const runningCount = this.#generations.filter((g) => g.status === "started").length;
       // - If the agent is thinking, but no generation is running, emit thinking end
-      if (this.#core.context.status.thinking) {
+      if (this.#core.context.get().status.thinking) {
         if (runningCount === 0) this.#core.emit({ type: "agent.thinking-end", urgent: true });
       }
       // - Or if the agent is not thinking, but a generation is running, emit thinking start
@@ -266,7 +266,7 @@ export class GenerationOrchestrator {
     for await (const generation of this.#generationsQueue) {
       for await (const chunk of limiter(generation.queue)) {
         // Set speaking status on first content chunk
-        if (!this.#core.context.status.speaking && chunk.type === "content") {
+        if (!this.#core.context.get().status.speaking && chunk.type === "content") {
           this.#core.emit({ type: "agent.speaking-start", urgent: true });
         }
 
@@ -274,7 +274,7 @@ export class GenerationOrchestrator {
         if (chunk.type === "content") {
           if (chunk.textChunk.length)
             this.#core.emit({ type: "agent.text-chunk", data: { textChunk: chunk.textChunk } });
-          if (this.#core.context.voiceEnabled && chunk.voiceChunk?.length)
+          if (this.#core.context.get().voiceEnabled && chunk.voiceChunk?.length)
             this.#core.emit({ type: "agent.voice-chunk", data: { voiceChunk: chunk.voiceChunk } });
         }
 
@@ -290,7 +290,7 @@ export class GenerationOrchestrator {
           this.#generations = this.#generations.filter((g) => g.id !== generation.id);
 
           // If this is the last generation, notify the end of speaking
-          if (this.#core.context.status.speaking && this.#generationsQueue.length() === 0) {
+          if (this.#core.context.get().status.speaking && this.#generationsQueue.length() === 0) {
             this.#core.emit({ type: "agent.speaking-end", urgent: true });
           }
 

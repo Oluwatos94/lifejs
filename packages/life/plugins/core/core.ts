@@ -10,9 +10,7 @@ import {
   updateMessageInputSchema,
 } from "@/agent/resources";
 import { audioChunkToMs } from "@/shared/audio-chunk-to-ms";
-import { klona } from "@/shared/klona";
 import { RollingBuffer } from "@/shared/rolling-buffer";
-import { equal } from "@/shared/stable-equal";
 import { serialize } from "@/shared/stable-serialize";
 import { definePlugin } from "../definition";
 import { GenerationOrchestrator } from "./generation/orchestrator";
@@ -90,6 +88,7 @@ export const corePlugin = definePlugin("core")
   .events({
     "messages.create": { dataSchema: createMessageInputSchema },
     "messages.update": { dataSchema: updateMessageInputSchema },
+    "messages.changed": { dataSchema: z.array(messageSchema) },
     "user.audio-chunk": { dataSchema: z.object({ audioChunk: z.custom<Int16Array>() }) },
     "user.voice-start": {},
     "user.voice-chunk": {
@@ -225,10 +224,23 @@ export const corePlugin = definePlugin("core")
     },
   })
   .lifecycle({
-    onStart: ({ context }) => {
+    onStart: ({ context, emit }) => {
+      // Log status changes
       context.onChange(
         (ctx) => ctx.status,
-        (newStatus) => console.log("💬", newStatus),
+        (newStatus) => console.log("🔄", newStatus),
+      );
+
+      // Log messages changes
+      context.onChange(
+        (ctx) => ctx.messages,
+        (newMessages) => console.log("💬", newMessages),
+      );
+
+      // Emit messages changed event
+      context.onChange(
+        (ctx) => ctx.messages,
+        (newMessages) => emit({ type: "messages.changed", data: newMessages }),
       );
     },
   })
@@ -246,9 +258,8 @@ export const corePlugin = definePlugin("core")
   })
   // 2. Maintain messages history
   .addEffect("handle-messages", ({ event, context }) => {
-    const _initialMessages = klona(context.messages);
     // Build the history instance
-    const history = new History(context.messages);
+    const history = new History(context.get().messages);
     // Handle direct history message creation requests
     if (event.type === "messages.create") history.createMessage(event.data);
     // Handle direct history message update requests
@@ -312,18 +323,6 @@ export const corePlugin = definePlugin("core")
 
     // Save the modified messages array
     context.set("messages", history.getMessages());
-
-    if (!equal(context.messages, _initialMessages)) {
-      // console.log(
-      //   "💬",
-      //   context.messages.map((m) => {
-      //     if (m.role === "user" || m.role === "agent") return `${m.role}: ${m.content}`;
-      //     const { createdAt, lastUpdated, role, id, ...rest } = klona(m);
-      //     return `${m.role}: ${JSON.stringify(rest)}`;
-      //   }),
-      // );
-      console.log("💬", context.messages);
-    }
   })
   // 3. Listen for incoming audio chunks coming from the WebRTC room
   .addService("incoming-audio", ({ agent, emit }) => {
@@ -382,7 +381,7 @@ export const corePlugin = definePlugin("core")
       const inSpeechChanged = inSpeech !== inSpeechBefore;
 
       // If the agent is currently listening
-      if (context.status.listening) {
+      if (context.get().status.listening) {
         // If the current chunk contains voice
         if (inSpeech) {
           // Reset post-padding count for the new voice session
@@ -494,7 +493,7 @@ export const corePlugin = definePlugin("core")
     };
 
     for await (const event of queue) {
-      if (!context.status.listening) continue;
+      if (!context.get().status.listening) continue;
 
       // Handle voice related events and text chunks
       if (event.type === "user.voice-start") userIsSpeaking = true;
@@ -509,7 +508,7 @@ export const corePlugin = definePlugin("core")
       if (!canAnswer()) continue;
 
       // Determine if the user has finished speaking
-      const endOfTurnProbability = await agent.models.eou.predict(context.messages);
+      const endOfTurnProbability = await agent.models.eou.predict(context.get().messages);
 
       // Emit the message if the user has finished speaking
       if (endOfTurnProbability >= END_OF_TURN_THRESHOLD) answer();
@@ -536,7 +535,7 @@ export const corePlugin = definePlugin("core")
     if (event.type !== "agent.resources-request") return;
     emit({
       type: "agent.resources-response",
-      data: { messages: context.messages, tools: config.tools, requestId: event.id },
+      data: { messages: context.get().messages, tools: config.tools, requestId: event.id },
     });
   })
   // 9. Handle tools executions

@@ -16,30 +16,38 @@ async function buildMemory(
 }
 
 export const memoriesPlugin = definePlugin("memories")
-  .dependencies([corePlugin.pick({ events: ["agent.resources-response"] })])
+  .dependencies([
+    corePlugin.pick({
+      events: ["agent.resources-response", "messages.changed"],
+      context: ["messages"],
+    }),
+  ])
   .config(
     z.object({
       items: z.array(z.instanceof(MemoryDefinitionBuilder)).default([]),
     }),
   )
   .events({
+    "history-changed": {
+      dataSchema: z.array(messageSchema),
+    },
     "build-request": {
       dataSchema: corePlugin._definition.events["agent.resources-response"].dataSchema,
     },
     "build-response": {
       dataSchema: corePlugin._definition.events["agent.resources-response"].dataSchema,
     },
-    "memory-result": {
+    "cache-build": {
+      dataSchema: z.object({
+        messagesHash: z.string(),
+        memories: z.array(messageSchema),
+      }),
+    },
+    "cache-memory": {
       dataSchema: z.object({
         name: z.string(),
         messages: z.array(messageSchema),
         timestamp: z.number(),
-      }),
-    },
-    "cache-update": {
-      dataSchema: z.object({
-        messagesHash: z.string(),
-        memories: z.array(messageSchema),
       }),
     },
   })
@@ -53,27 +61,30 @@ export const memoriesPlugin = definePlugin("memories")
         .default(new Map()),
     }),
   )
-  // Intercept the 'agent.resources-response' from core plugin
-  .addInterceptor(
-    "intercept-core-resources-response",
-    ({ dependencyName, event, drop, emit, context }) => {
-      if (dependencyName !== "core" || event.type !== "agent.resources-response") return;
+  // Intercept the 'agent.resources-response' from core plugin to emit blocking build-request
+  .addInterceptor("intercept-core-resources-response", ({ event, drop, dependency, current }) => {
+    if (dependency.name !== "core" || event.type !== "agent.resources-response") return;
 
-      // Ignore already processed requests
-      if (context.processedRequestsIds.has(event.data.requestId)) return;
+    // Ignore already processed requests
+    if (current.context.get().processedRequestsIds.has(event.data.requestId)) return;
 
-      // Drop the agent.resources-response event
-      drop("Will be re-emitted by memories later.");
+    // Drop the agent.resources-response event
+    drop("Will be re-emitted by memories later.");
 
-      // Emit a build-request event
-      emit({ type: "build-request", data: event.data });
-    },
-  )
+    // Emit a build-request event
+    current.emit({ type: "build-request", data: event.data });
+  })
+
+  // Intercept changes in core messages to emit non-blocking build-request
+  .addInterceptor("intercept-core-messages-change", ({ event, dependency, current }) => {
+    if (dependency.name !== "core" || event.type !== "messages.changed") return;
+    current.emit({ type: "history-changed", data: event.data });
+  })
 
   // Build non-blocking memories when build-request is received
   .addService("build-non-blocking-memories", async ({ config, emit, queue }) => {
     for await (const event of queue) {
-      if (event.type !== "build-request") continue;
+      if (event.type !== "history-changed") continue;
 
       const timestamp = Date.now();
 
@@ -83,9 +94,9 @@ export const memoriesPlugin = definePlugin("memories")
         if (def.config.behavior !== "non-blocking") continue;
 
         // Fire and forget - don't await
-        buildMemory(item, event.data.messages)
+        buildMemory(item, event.data)
           .then((messages) => {
-            emit({ type: "memory-result", data: { name: def.name, messages, timestamp } });
+            emit({ type: "cache-memory", data: { name: def.name, messages, timestamp } });
           })
           .catch((error) => {
             console.error(`Failed to update non-blocking memory '${def.name}':`, error);
@@ -103,7 +114,7 @@ export const memoriesPlugin = definePlugin("memories")
       const messagesHash = await sha256({ messages: event.data.messages });
 
       // Check if we've already computed memories for these messages
-      const cachedResult = context.computedMemoriesCache.get(messagesHash);
+      const cachedResult = context.get().computedMemoriesCache.get(messagesHash);
       if (cachedResult) {
         // Use cached result
         emit({
@@ -130,7 +141,7 @@ export const memoriesPlugin = definePlugin("memories")
         const messages = await buildMemory(item, event.data.messages);
         blockingResults.set(index, messages);
         emit({
-          type: "memory-result",
+          type: "cache-memory",
           data: { name: def.name, messages, timestamp },
         });
       });
@@ -147,14 +158,14 @@ export const memoriesPlugin = definePlugin("memories")
           const messages = blockingResults.get(i) ?? [];
           memoriesMessages.push(...messages);
         } else {
-          const cached = context.memoriesLastResults.get(def.name) ?? [];
+          const cached = context.get().memoriesLastResults.get(def.name) ?? [];
           memoriesMessages.push(...cached);
         }
       }
 
       // Emit cache update event
       emit({
-        type: "cache-update",
+        type: "cache-build",
         data: { messagesHash, memories: memoriesMessages },
       });
 
@@ -169,10 +180,9 @@ export const memoriesPlugin = definePlugin("memories")
     }
   })
   // Store memory results in context (only if newer than existing)
-  .addEffect("store-memory-result", ({ event, context }) => {
-    if (event.type !== "memory-result") return;
-
-    const currentTimestamp = context.memoriesLastTimestamp.get(event.data.name) ?? 0;
+  .addEffect("handle-memory-cache", ({ event, context }) => {
+    if (event.type !== "cache-memory") return;
+    const currentTimestamp = context.get().memoriesLastTimestamp.get(event.data.name) ?? 0;
     if (event.data.timestamp >= currentTimestamp) {
       context.set("memoriesLastResults", (prev) => {
         const newMap = new Map(prev);
@@ -187,8 +197,8 @@ export const memoriesPlugin = definePlugin("memories")
     }
   })
   // Update the computed memories cache
-  .addEffect("update-cache", ({ event, context }) => {
-    if (event.type !== "cache-update") return;
+  .addEffect("handle-build-cache", ({ event, context }) => {
+    if (event.type !== "cache-build") return;
 
     context.set("computedMemoriesCache", (prev) => {
       const newMap = new Map(prev);
@@ -210,6 +220,8 @@ export const memoriesPlugin = definePlugin("memories")
     });
     // Re-emit the resources response event
     // dependencies.core.context.
-
-    dependencies.core.emit({ type: "agent.resources-response", data: event.data });
+    dependencies.core.emit({
+      type: "agent.resources-response",
+      data: event.data,
+    });
   });

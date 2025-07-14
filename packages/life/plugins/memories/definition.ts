@@ -25,7 +25,7 @@ export interface MemoryDefinition {
   name: string;
   config: MemoryConfig<"output">;
   output?: Message[] | ((params: { messages: Message[] }) => Message[] | Promise<Message[]>);
-  onHistoryChange?: (history: Message[]) => void;
+  onHistoryChange?: (params: { messages: Message[] }) => void;
   dependencies: MemoryDependenciesDefinition;
 }
 
@@ -61,11 +61,11 @@ export class MemoryDefinitionBuilder<const Definition extends MemoryDefinition> 
       output: params,
     });
   }
-
-  onHistoryChange(onHistoryChange: (history: Message[]) => void) {
+  // biome-ignore lint/nursery/noShadow: expected here
+  onHistoryChange(params: (params: { messages: Message[] }) => void) {
     return new MemoryDefinitionBuilder({
       ...this.#def,
-      onHistoryChange,
+      onHistoryChange: params,
     });
   }
 

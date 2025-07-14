@@ -16,6 +16,9 @@ async function main() {
       items: [
         defineMemory("instructions")
           .config({ behavior: "blocking" })
+          .onHistoryChange(({ messages }) => {
+            console.log("History changed:", messages);
+          })
           .output(() => {
             const history = new History([]);
             history.createMessage({

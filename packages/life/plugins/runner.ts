@@ -11,6 +11,7 @@ import type {
   PluginEvent,
   PluginEventsDefinition,
   PluginInterceptorFunction,
+  PluginMethodsDef,
   ReadonlyPluginContext,
   WritablePluginContext,
 } from "@/plugins/definition";
@@ -20,13 +21,15 @@ import { newId } from "@/shared/prefixed-id";
 import { equal } from "@/shared/stable-equal";
 import type { SerializableValue } from "@/shared/stable-serialize";
 
+
 type PluginExternalInterceptor<TDefinition extends PluginDefinition = PluginDefinition> = {
   runner: PluginRunner<TDefinition>;
   interceptor: PluginInterceptorFunction<
     PluginDependenciesDefinition,
     PluginEventsDefinition,
     PluginConfigDefinition,
-    PluginContextDefinition
+    PluginContextDefinition,
+    PluginMethodsDef | undefined
   >;
 };
 
@@ -72,34 +75,26 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     return this.#finalMethods;
   }
 
-  // Create read-only context with onChange (always returns fresh values)
+  // Create read-only context with onChange and get
   #createReadonlyContext(): ReadonlyPluginContext<PluginContext<Definition["context"], "output">> {
-    const runner = this;
-    return new Proxy({} as ReadonlyPluginContext<PluginContext<Definition["context"], "output">>, {
-      get(_, prop) {
-        if (prop === "onChange") return runner.#onContextChange.bind(runner);
-        // Always return fresh value from current context
-        return runner.#context[prop as keyof PluginContext<Definition["context"], "output">];
-      },
-      set() {
-        throw new Error("Context is read-only. Use set() method in effects to modify context.");
-      },
-    });
+    return {
+      onChange: this.#onContextChange.bind(this),
+      get: this.#getContext.bind(this),
+    };
   }
 
   // Create writable context for effects
   #createWritableContext(): WritablePluginContext<PluginContext<Definition["context"], "output">> {
-    const runner = this;
-    return new Proxy({} as WritablePluginContext<PluginContext<Definition["context"], "output">>, {
-      get(_, prop) {
-        if (prop === "onChange") return runner.#onContextChange.bind(runner);
-        if (prop === "set") return runner.#setContext.bind(runner);
-        return runner.#context[prop as keyof PluginContext<Definition["context"], "output">];
-      },
-      set() {
-        throw new Error("Direct assignment not allowed. Use set() method to modify context.");
-      },
-    });
+    return {
+      onChange: this.#onContextChange.bind(this),
+      get: this.#getContext.bind(this),
+      set: this.#setContext.bind(this),
+    };
+  }
+
+  // Context getter - returns a cloned snapshot
+  #getContext(): PluginContext<Definition["context"], "output"> {
+    return klona(this.#context);
   }
 
   // Context setter
@@ -151,6 +146,13 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     for (const listener of this.#contextListeners) {
       const newSelectedValue = listener.selector(this.#context);
       const oldSelectedValue = listener.selector(oldContext);
+      // if (Array.isArray(newSelectedValue))
+      //   console.log(
+      //     "🐳",
+      //     equal(newSelectedValue, oldSelectedValue),
+      //     newSelectedValue,
+      //     oldSelectedValue,
+      //   );
 
       // Only call if value actually changed
       if (!equal(newSelectedValue, oldSelectedValue)) {
@@ -167,6 +169,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
         await this.#definition.lifecycle.onError({
           config: this.#config,
           context: this.#createWritableContext(),
+          emit: this.emit.bind(this) as EmitFunction,
           error,
         });
       } catch (errorHandlerError) {
@@ -267,6 +270,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
         await this.#definition.lifecycle.onStart({
           config: this.#config,
           context: this.#createWritableContext(),
+          emit: this.emit.bind(this) as EmitFunction,
         });
       } catch (error) {
         console.error(
@@ -282,12 +286,12 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     // Run the queue
     for await (let event of this.#queue) {
       try {
-        if (
-          event.type !== "user.audio-chunk" &&
-          event.type !== "user.voice-chunk" &&
-          event.type !== "agent.voice-chunk"
-        )
-          console.log("🐳", event);
+        // if (
+        //   event.type !== "user.audio-chunk" &&
+        //   event.type !== "user.voice-chunk" &&
+        //   event.type !== "agent.voice-chunk"
+        // )
+        //   console.log("🐳", event);
 
         // 1. Run external interceptors
         let isDropped = false;
@@ -296,15 +300,28 @@ export class PluginRunner<const Definition extends PluginDefinition> {
           const next = (newEvent: PluginEvent<PluginEventsDefinition, "output">) => {
             event = newEvent;
           };
+
           // biome-ignore lint/nursery/noAwaitInLoop: sequential execution expected here
           await interceptor({
-            config: runner.#config,
-            context: runner.#createReadonlyContext(),
-            emit: runner.emit.bind(runner),
-            dependencyName: this.#definition.name,
             event,
-            drop,
             next,
+            drop,
+            dependency: {
+              name: this.#definition.name,
+              events: this.#definition.events,
+              methods: this.#finalMethods,
+              // @ts-expect-error
+              config: this.#config,
+              // @ts-expect-error
+              context: this.#createReadonlyContext(),
+              emit: this.emit.bind(this) as EmitFunction,
+            },
+            current: {
+              emit: runner.emit.bind(runner) as EmitFunction,
+              context: runner.#createReadonlyContext(),
+              methods: runner.#finalMethods,
+              config: runner.#config,
+            },
           });
           if (isDropped) break;
         }
@@ -348,6 +365,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
         await this.#definition.lifecycle.onStop({
           config: this.#config,
           context: this.#createWritableContext(),
+          emit: this.emit.bind(this) as EmitFunction,
         });
       } catch (error) {
         console.error(`Error in onStop lifecycle hook for plugin ${this.#definition.name}:`, error);

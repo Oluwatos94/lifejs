@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Agent } from "@/agent/agent";
 import type { AsyncQueue } from "@/shared/async-queue";
+import type { SerializableValue } from "@/shared/stable-serialize";
 
 /** 
 @dev Because this plugin builder uses a lot of union and nested types, it might be a little slow with 
@@ -36,7 +37,7 @@ export type PluginDependencies<Defs extends PluginDependenciesDefinition> = {
       ? PluginConfig<Defs[K]["config"], "output">
       : never;
     context: Defs[K]["context"] extends PluginContextDefinition
-      ? Readonly<PluginContext<Defs[K]["context"], "output">>
+      ? ReadonlyPluginContext<PluginContext<Defs[K]["context"], "output">>
       : never;
     emit: EmitFunction<Defs[K]["events"]>;
   };
@@ -57,14 +58,20 @@ export type PluginContext<
 > = T extends "input" ? z.input<Def> : z.output<Def>;
 
 // Context API types
-export type ReadonlyPluginContext<T> = Readonly<T> & {
-  onChange<R>(
+export type ReadonlyPluginContext<T> = {
+  onChange<R extends SerializableValue>(
     selector: (context: T) => R,
     callback: (newValue: R, oldValue: R) => void,
   ): () => void; // Returns unsubscribe function
+  get(): T; // Returns a cloned snapshot of the context
 };
 
-export type WritablePluginContext<T> = ReadonlyPluginContext<T> & {
+export type WritablePluginContext<T> = {
+  onChange<R extends SerializableValue>(
+    selector: (context: T) => R,
+    callback: (newValue: R, oldValue: R) => void,
+  ): () => void; // Returns unsubscribe function
+  get(): T; // Returns a cloned snapshot of the context
   set<K extends keyof T>(key: K, valueOrUpdater: T[K] | ((prev: T[K]) => T[K])): void;
 };
 
@@ -116,18 +123,22 @@ export type PluginMethods<MethodsDef extends PluginMethodsDef | undefined> =
 export type PluginLifecycle<
   ConfigDef extends PluginConfigDefinition,
   ContextDef extends PluginContextDefinition,
+  EventsDef extends PluginEventsDefinition = PluginEventsDefinition,
 > = {
   onStart?: (params: {
     config: PluginConfig<ConfigDef, "output">;
     context: WritablePluginContext<PluginContext<ContextDef, "output">>;
+    emit: EmitFunction<EventsDef>;
   }) => void | Promise<void>;
   onStop?: (params: {
     config: PluginConfig<ConfigDef, "output">;
     context: WritablePluginContext<PluginContext<ContextDef, "output">>;
+    emit: EmitFunction<EventsDef>;
   }) => void | Promise<void>;
   onError?: (params: {
     config: PluginConfig<ConfigDef, "output">;
     context: WritablePluginContext<PluginContext<ContextDef, "output">>;
+    emit: EmitFunction<EventsDef>;
     error: unknown;
   }) => void | Promise<void>;
 };
@@ -172,14 +183,20 @@ export type PluginInterceptorFunction<
   EventsDef extends PluginEventsDefinition,
   ConfigDef extends PluginConfigDefinition,
   ContextDef extends PluginContextDefinition,
+  MethodsDef extends PluginMethodsDef | undefined,
 > = (params: {
-  dependencyName: keyof DependenciesDef;
   event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">;
-  config: PluginConfig<ConfigDef, "output">;
-  context: ReadonlyPluginContext<PluginContext<ContextDef, "output">>;
-  emit: EmitFunction<EventsDef>;
-  drop: (reason: string) => void;
   next: (event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">) => void;
+  drop: (reason: string) => void;
+  dependency: PluginDependencies<DependenciesDef>[keyof DependenciesDef] & {
+    name: keyof DependenciesDef;
+  };
+  current: {
+    emit: EmitFunction<EventsDef>;
+    context: ReadonlyPluginContext<PluginContext<ContextDef, "output">>;
+    methods: PluginMethods<MethodsDef>;
+    config: PluginConfig<ConfigDef, "output">;
+  };
 }) => void | Promise<void>;
 
 // - Definition
@@ -190,7 +207,7 @@ export interface PluginDefinition {
   context: PluginContextDefinition;
   events: PluginEventsDefinition;
   methods: PluginMethodsDef;
-  lifecycle: PluginLifecycle<PluginConfigDefinition, PluginContextDefinition>;
+  lifecycle: PluginLifecycle<PluginConfigDefinition, PluginContextDefinition, PluginEventsDefinition>;
   effects: Record<
     string,
     PluginEffectFunction<
@@ -217,7 +234,8 @@ export interface PluginDefinition {
       PluginDependenciesDefinition,
       PluginEventsDefinition,
       PluginConfigDefinition,
-      PluginContextDefinition
+      PluginContextDefinition,
+      PluginMethodsDef | undefined
     >
   >;
 }
@@ -373,7 +391,7 @@ export class PluginDefinitionBuilder<
   }
 
   lifecycle<
-    const LifecycleConfig extends PluginLifecycle<Definition["config"], Definition["context"]>,
+    const LifecycleConfig extends PluginLifecycle<Definition["config"], Definition["context"], Definition["events"]>,
   >(lifecycle: LifecycleConfig) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
@@ -470,7 +488,8 @@ export class PluginDefinitionBuilder<
       Definition["dependencies"],
       Definition["events"],
       Definition["config"],
-      Definition["context"]
+      Definition["context"],
+      Definition["methods"]
     >,
   ) {
     const plugin = new PluginDefinitionBuilder({
@@ -505,7 +524,9 @@ export class PluginDefinitionBuilder<
     const Options extends {
       events?: Array<keyof Definition["events"]>;
       methods?: Array<keyof Definition["methods"]>;
-      context?: Array<keyof Definition["context"]>;
+      context?: Definition["context"] extends z.ZodObject<infer Shape extends z.ZodRawShape> 
+        ? Array<keyof Shape>
+        : never;
       config?: boolean;
     },
   >(options: Options) {
@@ -559,8 +580,8 @@ export class PluginDefinitionBuilder<
         ? Definition["config"]
         : z.ZodObject<Record<string, never>>;
       context: Options["context"] extends Array<infer K>
-        ? K extends keyof Definition["context"]
-          ? Pick<Definition["context"], K>
+        ? Definition["context"] extends z.ZodObject<infer Shape extends z.ZodRawShape>
+          ? z.ZodObject<Pick<Shape, K extends keyof Shape ? K : never>>
           : Definition["context"]
         : Definition["context"];
       events: Options["events"] extends Array<infer K>
