@@ -77,4 +77,5 @@ Before concluding that a performed change is working, write a minimal temporary 
 
 ### Answers Tips
 - Keep your answer minimal and dense, still easy to read quickly
+- Be as transparent as possible with the user, always explain shortly your reasoning
 - Consider introducing a TL;DR at the top or bottom of complex explanations
