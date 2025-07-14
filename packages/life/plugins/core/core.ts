@@ -72,19 +72,6 @@ export const corePlugin = definePlugin("core")
         .default({}),
     }),
   )
-  .context(
-    z.object({
-      messages: z.array(messageSchema).default([]),
-      status: z
-        .object({
-          listening: z.boolean().default(true),
-          thinking: z.boolean().default(false),
-          speaking: z.boolean().default(false),
-        })
-        .default({}),
-      voiceEnabled: z.boolean().default(true),
-    }),
-  )
   .events({
     "messages.create": { dataSchema: createMessageInputSchema },
     "messages.update": { dataSchema: updateMessageInputSchema },
@@ -162,7 +149,25 @@ export const corePlugin = definePlugin("core")
     "agent.thinking-start": {}, // start of generation
     "agent.thinking-end": {}, // end of generation
   })
+  .context(
+    z.object({
+      messages: z.array(messageSchema).default([]),
+      status: z
+        .object({
+          listening: z.boolean().default(true),
+          thinking: z.boolean().default(false),
+          speaking: z.boolean().default(false),
+        })
+        .default({}),
+      voiceEnabled: z.boolean().default(true),
+    }),
+  )
   .methods({
+    getMessages: {
+      schema: z.function().returns(z.array(messageSchema)),
+      run: ({ context }) => context.get().messages,
+    },
+
     createMessage: {
       schema: z.function().args(createMessageInputSchema).returns(z.string()),
       run: ({ emit }, message) => emit({ type: "messages.create", data: message, urgent: true }),

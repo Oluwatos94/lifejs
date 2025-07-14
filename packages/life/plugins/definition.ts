@@ -358,10 +358,7 @@ export class PluginDefinitionBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods | "events">;
   }
 
-  methods<
-    // biome-ignore lint/suspicious/noExplicitAny: Generic constraint requires any for flexible function type inference
-    const Schemas extends Record<string, AnyZodFunction>,
-  >(
+  methods<const Schemas extends Record<string, AnyZodFunction>>(
     schemasAndImplementations: {
       [K in keyof Schemas]: {
         schema: Schemas[K];
@@ -370,7 +367,7 @@ export class PluginDefinitionBuilder<
               params: {
                 agent: Agent;
                 config: PluginConfig<Definition["config"], "output">;
-                context: Readonly<PluginContext<Definition["context"], "output">>;
+                context: ReadonlyPluginContext<PluginContext<Definition["context"], "output">>;
                 emit: EmitFunction<Definition["events"]>;
               },
               ...args: z.infer<TArgs> extends readonly unknown[] ? z.infer<TArgs> : never
