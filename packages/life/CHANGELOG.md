@@ -1,5 +1,17 @@
 # life
 
+## 0.9.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [180bd76](https://github.com/lifejs/lifejs/commit/180bd76dd5450abe347f31e3c6844074e783961e) — Simplify the plugin context API to enforce immutability without neither relying on complex JS Proxy patterns, nor on the consumers to properly clone values
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [2922863](https://github.com/lifejs/lifejs/commit/29228635e7c74723e023e902310dd6da1c9008d3) — Plugin.methods() was still be typed with the raw context
+- [@LilaRest](https://github.com/LilaRest) in [180bd76](https://github.com/lifejs/lifejs/commit/180bd76dd5450abe347f31e3c6844074e783961e) — Make non-blocking memories running on history change, instead of resources requests
+- [@LilaRest](https://github.com/LilaRest) in [4685488](https://github.com/lifejs/lifejs/commit/468548843e8b76625199a5d3bd9d0974a45fe939) — Fix plugin.pick() broken typesafety
+
 ## 0.8.1
 
 ### Patch Changes
