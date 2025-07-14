@@ -7,7 +7,7 @@ import { type VADProviderConfig, vadProviderConfigSchema } from "@/models/vad";
 import {
   type ServerTransportProviderConfig,
   serverTransportProviderConfigSchema,
-} from "@/transport/index.server";
+} from "@/transport/server";
 
 export const configDefinitionSchema = z
   .object({

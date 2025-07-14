@@ -92,11 +92,12 @@
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
-    "tsup": "^8.5.0",
     "@cartesia/cartesia-js": "^2.2.5",
     "@deepgram/sdk": "4.9.1",
     "@mistralai/mistralai": "^1.7.4",
-    "openai": "^5.9.0"
+    "@types/bun": "^1.2.18",
+    "openai": "^5.9.0",
+    "tsup": "^8.5.0"
   },
   "peerDependencies": {
     "@cartesia/cartesia-js": "^2.2.5",

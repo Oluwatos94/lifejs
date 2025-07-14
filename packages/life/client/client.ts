@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { clientTransportProviders } from "@/transport/index.client";
+import { clientTransportProviders } from "@/transport/client";
 
 export const agentClientConfigSchema = z.object({});
 

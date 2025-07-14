@@ -6,12 +6,12 @@ import { type TTSProvider, ttsProviders } from "@/models/tts";
 import { type VADProvider, vadProviders } from "@/models/vad";
 import type { PluginDefinition } from "@/plugins/definition";
 import { PluginRunner } from "@/plugins/runner";
-import { type ServerTransportProvider, serverTransportProviders } from "@/transport/index.server";
+import { TransportServer } from "@/transport/server";
 import type { AgentDefinition } from "./definition";
 
 export class Agent {
   definition: AgentDefinition;
-  transport: InstanceType<ServerTransportProvider>;
+  transport: TransportServer;
   storage = null;
   models: {
     vad: InstanceType<VADProvider>;
@@ -26,15 +26,7 @@ export class Agent {
     this.definition = definition;
 
     // Initialize transport
-    const serverTransportProvider = serverTransportProviders[definition.config.transport.provider];
-    this.transport = new serverTransportProvider.class(definition.config.transport);
-    this.transport.joinRoom("room-1").then(() => {
-      // TMP: Expose say() via RPC
-      this.transport.receiveObject("rpc-say", (data) => {
-        // @ts-expect-error
-        this.plugins.core.say(data);
-      });
-    });
+    this.transport = new TransportServer(definition.config.transport);
 
     // Initialize storage
     // TODO
@@ -158,13 +150,11 @@ export class Agent {
     );
 
     // Disconnect transport
-    if (this.transport.isConnected) {
-      try {
-        await this.transport.leaveRoom();
-        console.log("Transport disconnected");
-      } catch (error) {
-        console.error("Error disconnecting transport:", error);
-      }
+    try {
+      await this.transport.leaveRoom();
+      console.log("Transport disconnected");
+    } catch (error) {
+      console.error("Error disconnecting transport:", error);
     }
 
     console.log("Agent stopped");

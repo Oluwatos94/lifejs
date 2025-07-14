@@ -95,7 +95,7 @@ export class LiveKitClientTransport extends ClientTransportBase<z.AnyZodObject> 
   async enableMicrophone() {
     this.ensureConnected("enableMicrophone", this);
     await this.room.localParticipant.setMicrophoneEnabled(true, {
-      echoCancellation: false,
+      echoCancellation: true,
       noiseSuppression: false,
       voiceIsolation: false,
     });
