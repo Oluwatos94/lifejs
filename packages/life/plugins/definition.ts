@@ -35,11 +35,13 @@ export type PluginDependencies<Defs extends PluginDependenciesDefinition> = {
     };
     config: Defs[K]["config"] extends PluginConfigDefinition
       ? PluginConfig<Defs[K]["config"], "output">
-      : never;
+      : Readonly<Record<string, never>>;
     context: Defs[K]["context"] extends PluginContextDefinition
       ? ReadonlyPluginContext<PluginContext<Defs[K]["context"], "output">>
-      : never;
-    emit: EmitFunction<Defs[K]["events"]>;
+      : ReadonlyPluginContext<Record<string, never>>;
+    emit: EmitFunction<
+      Defs[K]["events"] extends PluginEventsDefinition ? Defs[K]["events"] : Record<string, never>
+    >;
   };
 };
 
@@ -207,7 +209,11 @@ export interface PluginDefinition {
   context: PluginContextDefinition;
   events: PluginEventsDefinition;
   methods: PluginMethodsDef;
-  lifecycle: PluginLifecycle<PluginConfigDefinition, PluginContextDefinition, PluginEventsDefinition>;
+  lifecycle: PluginLifecycle<
+    PluginConfigDefinition,
+    PluginContextDefinition,
+    PluginEventsDefinition
+  >;
   effects: Record<
     string,
     PluginEffectFunction<
@@ -254,7 +260,7 @@ export class PluginDefinitionBuilder<
     this._definition = def;
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+  // biome-ignore lint/suspicious/noExplicitAny: Required for plugin builder type flexibility
   dependencies<const Plugins extends PluginDefinitionBuilder<any, any, any, any, any>[]>(
     plugins: Plugins,
   ) {
@@ -391,7 +397,11 @@ export class PluginDefinitionBuilder<
   }
 
   lifecycle<
-    const LifecycleConfig extends PluginLifecycle<Definition["config"], Definition["context"], Definition["events"]>,
+    const LifecycleConfig extends PluginLifecycle<
+      Definition["config"],
+      Definition["context"],
+      Definition["events"]
+    >,
   >(lifecycle: LifecycleConfig) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
@@ -524,76 +534,39 @@ export class PluginDefinitionBuilder<
     const Options extends {
       events?: Array<keyof Definition["events"]>;
       methods?: Array<keyof Definition["methods"]>;
-      context?: Definition["context"] extends z.ZodObject<infer Shape extends z.ZodRawShape> 
+      context?: Definition["context"] extends z.ZodObject<infer Shape extends z.ZodRawShape>
         ? Array<keyof Shape>
         : never;
       config?: boolean;
     },
   >(options: Options) {
-    // Helper to pick specific keys from an object
-    const pickKeys = <T extends Record<string, unknown>>(
-      obj: T,
-      keys: Array<keyof T> | undefined,
-    ): T => {
-      if (!keys) return obj;
-      const result = {} as T;
-      for (const key of keys) {
-        if (key in obj) result[key] = obj[key];
-      }
-      return result;
-    };
-
-    // Helper to pick specific keys from a Zod object schema
-    const pickZodSchema = (schema: z.AnyZodObject, keys: string[] | undefined): z.AnyZodObject => {
-      if (!keys || keys.length === 0) return schema;
-      // Use Zod's native pick method
-      const pickObj: Record<string, true> = {};
-      for (const key of keys) pickObj[key] = true;
-      return schema.pick(pickObj);
-    };
-
-    // Build the picked definition
-    const pickedDefinition: PluginDefinition = {
-      name: this._definition.name,
-      dependencies: {}, // Dependencies are not picked
-      config: options.config ? this._definition.config : z.object({}),
-      context: options.context
-        ? pickZodSchema(this._definition.context, options.context as string[])
-        : this._definition.context,
-      events: options.events
-        ? pickKeys(this._definition.events, options.events as string[])
-        : this._definition.events,
-      methods: options.methods
-        ? pickKeys(this._definition.methods as PluginMethodsDef, options.methods as string[])
-        : (this._definition.methods ?? {}),
-      lifecycle: {}, // Lifecycle is not picked
-      effects: {}, // Effects are not picked
-      services: {}, // Services are not picked
-      interceptors: {}, // Interceptors are not picked
-    };
+    // Pick is now type-only - runtime always returns the full plugin
+    // TypeScript will enforce the constraints at compile time
+    options; // Mark as used
+    const pickedDefinition: PluginDefinition = this._definition;
 
     // Type for the picked definition
-    type PickedDefinition = Definition & {
+    type PickedDefinition = {
       name: Definition["name"];
-      dependencies: PluginDependenciesDefinition;
+      dependencies: Definition["dependencies"];
       config: Options["config"] extends true
         ? Definition["config"]
         : z.ZodObject<Record<string, never>>;
-      context: Options["context"] extends Array<infer K>
+      context: Options["context"] extends readonly (infer K)[]
         ? Definition["context"] extends z.ZodObject<infer Shape extends z.ZodRawShape>
           ? z.ZodObject<Pick<Shape, K extends keyof Shape ? K : never>>
           : Definition["context"]
         : Definition["context"];
-      events: Options["events"] extends Array<infer K>
-        ? K extends keyof Definition["events"]
-          ? Pick<Definition["events"], K>
-          : Definition["events"]
+      events: Options["events"] extends readonly (keyof Definition["events"])[]
+        ? Pick<Definition["events"], Options["events"][number]>
         : Definition["events"];
-      methods: Options["methods"] extends Array<infer K>
-        ? K extends keyof Definition["methods"]
-          ? Pick<Definition["methods"], K>
-          : PluginMethodsDef
+      methods: Options["methods"] extends readonly (keyof Definition["methods"])[]
+        ? Pick<Definition["methods"], Options["methods"][number]>
         : Definition["methods"];
+      lifecycle: Definition["lifecycle"];
+      effects: Definition["effects"];
+      services: Definition["services"];
+      interceptors: Definition["interceptors"];
     };
 
     return new PluginDefinitionBuilder(pickedDefinition) as unknown as PluginDefinitionBuilder<

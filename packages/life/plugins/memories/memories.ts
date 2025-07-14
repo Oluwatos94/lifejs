@@ -20,6 +20,7 @@ export const memoriesPlugin = definePlugin("memories")
     corePlugin.pick({
       events: ["agent.resources-response", "messages.changed"],
       context: ["messages"],
+      config: true,
     }),
   ])
   .config(
@@ -219,7 +220,9 @@ export const memoriesPlugin = definePlugin("memories")
       return newSet;
     });
     // Re-emit the resources response event
-    // dependencies.core.context.
+    dependencies.core.context.get().messages;
+    dependencies.core.config.tools;
+
     dependencies.core.emit({
       type: "agent.resources-response",
       data: event.data,
