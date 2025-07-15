@@ -21,7 +21,6 @@ import { newId } from "@/shared/prefixed-id";
 import { equal } from "@/shared/stable-equal";
 import type { SerializableValue } from "@/shared/stable-serialize";
 
-
 type PluginExternalInterceptor<TDefinition extends PluginDefinition = PluginDefinition> = {
   runner: PluginRunner<TDefinition>;
   interceptor: PluginInterceptorFunction<

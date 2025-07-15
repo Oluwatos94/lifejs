@@ -6,10 +6,12 @@ import { type TTSProvider, ttsProviders } from "@/models/tts";
 import { type VADProvider, vadProviders } from "@/models/vad";
 import type { PluginDefinition } from "@/plugins/definition";
 import { PluginRunner } from "@/plugins/runner";
+import { newId } from "@/shared/prefixed-id";
 import { TransportServer } from "@/transport/server";
 import type { AgentDefinition } from "./definition";
 
 export class Agent {
+  id = newId("agent");
   definition: AgentDefinition;
   transport: TransportServer;
   storage = null;
@@ -48,18 +50,6 @@ export class Agent {
     // Initialize plugins
     // - Validate plugins
     this.#validatePlugins();
-
-    // - Create plugin runners
-    for (const plugin of this.definition.plugins) {
-      const config = plugin.config.parse(this.definition.pluginConfigs[plugin.name] ?? {});
-      this.plugins[plugin.name] = new PluginRunner(this, plugin, config);
-    }
-
-    // - Prepare all plugins (this sets up services, interceptors, etc.)
-    for (const plugin of this.definition.plugins) {
-      // biome-ignore lint/style/noNonNullAssertion: defined above, so exists
-      this.plugins[plugin.name]!.init();
-    }
   }
 
   #validatePlugins() {
@@ -133,6 +123,16 @@ export class Agent {
   }
 
   async start() {
+    // - Create plugin runners
+    for (const plugin of this.definition.plugins) {
+      const config = plugin.config.parse(this.definition.pluginConfigs[plugin.name] ?? {});
+      this.plugins[plugin.name] = new PluginRunner(this, plugin, config);
+    }
+
+    // - Prepare all plugins (this sets up services, interceptors, etc.)
+    // biome-ignore lint/style/noNonNullAssertion: defined above, so exists
+    for (const plugin of this.definition.plugins) this.plugins[plugin.name]!.init();
+
     // Start all plugin runners
     await Promise.all(Object.values(this.plugins).map((p) => p.start()));
   }

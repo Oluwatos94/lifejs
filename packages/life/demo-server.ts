@@ -2,8 +2,10 @@ import "dotenv/config";
 import { Agent } from "./agent/agent";
 import { History } from "./agent/history";
 import { defaults, defineAgent, defineMemory } from "./exports/define";
+import { getToken } from "./transport/auth";
 
 async function main() {
+  // Define the agent
   const builder = defineAgent("demo")
     .plugins([...defaults.plugins])
     .config({
@@ -33,6 +35,7 @@ async function main() {
       ],
     });
 
+  // Instantiate the agent
   const agent = new Agent(builder._definition);
 
   // Handle graceful shutdown
@@ -45,13 +48,15 @@ async function main() {
     await agent.stop();
     process.exit(0);
   };
-
-  // Listen for interrupt signals
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
+  // Start the agent
+  const roomId = "room-1";
+  const token = await getToken("livekit", builder._definition.config.transport, roomId, agent.id);
+  await agent.transport.joinRoom(roomId, token);
   await agent.start();
-  console.log("Agent server started");
+  console.log("Agent server started. Press Ctrl+C to stop.");
 
   // Keep the process alive
   await new Promise((resolve) => resolve(undefined));

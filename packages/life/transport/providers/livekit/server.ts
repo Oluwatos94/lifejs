@@ -11,7 +11,6 @@ import {
   TrackSource,
 } from "@livekit/rtc-node";
 import { z } from "zod";
-import { getToken } from "@/transport/auth";
 import { BaseServerTransportProvider, type ServerTransportEvent } from "../base/server";
 
 // - Config
@@ -86,7 +85,7 @@ export class LiveKitServerTransport extends BaseServerTransportProvider<
     });
   }
 
-  async joinRoom(roomId: string): Promise<void> {
+  async joinRoom(roomId: string, token: string): Promise<void> {
     // If we are already connected to this room, do nothing
     if (roomId === this.room?.name) return;
     // If we are already connected to a room, leave it before
@@ -99,7 +98,6 @@ export class LiveKitServerTransport extends BaseServerTransportProvider<
     this.#initializeListeners(this.room);
 
     // Connect to the room and auto-subscribe to tracks
-    const token = await getToken("livekit", this.config, "room-1", "agent-1");
     await this.room.connect(this.config.serverUrl, token, {
       autoSubscribe: true,
       dynacast: true,

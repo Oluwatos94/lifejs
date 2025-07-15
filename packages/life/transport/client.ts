@@ -49,4 +49,8 @@ export class TransportClient extends TransportCommon {
     this._provider.streamText(...args);
   receiveStreamText: BaseClientTransportProvider<z.AnyZodObject>["receiveStreamText"] = (...args) =>
     this._provider.receiveStreamText(...args);
+  enableMicrophone: BaseClientTransportProvider<z.AnyZodObject>["enableMicrophone"] = (...args) =>
+    this._provider.enableMicrophone(...args);
+  playAudio: BaseClientTransportProvider<z.AnyZodObject>["playAudio"] = (...args) =>
+    this._provider.playAudio(...args);
 }
