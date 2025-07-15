@@ -3,6 +3,7 @@ import "dotenv/config";
 import { defaults, defineAgent, defineMemory, defineStore } from "life/define";
 import z from "zod";
 
+// Example of controlled store
 const newsStore = defineStore("news")
   .config({
     type: "controlled",
@@ -18,6 +19,7 @@ const newsStore = defineStore("news")
     ];
   });
 
+// Example of freeform store
 const formStore = defineStore("form").config({
   type: "freeform",
   schema: z.object({
@@ -33,7 +35,18 @@ const formStore = defineStore("form").config({
     firstName: "",
     lastName: "",
   },
-});
+}); /*
+Then if a store is registered as dependency in a memory for example:
+- For freeform stores
+stores.myStore.get()
+stores.myStore.set()
+stores.myStore.onChange(selector, handler)
+
+- For controlled stores
+stores.myStore.get()
+stores.myStore.refetch()
+stores.myStore.onChange(selector, handler)
+*/
 
 const newsMemory = defineMemory("news")
   .dependencies({

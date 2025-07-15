@@ -2,6 +2,7 @@ export { defineAgent } from "@/agent/definition";
 export { defineConfig } from "@/config/definition";
 export { definePlugin } from "@/plugins/definition";
 export { defineMemory } from "@/plugins/memories/definition";
+export { defineStore } from "@/plugins/stores/definition";
 
 import { corePlugin } from "@/plugins/core/core";
 import { memoriesPlugin } from "@/plugins/memories/memories";

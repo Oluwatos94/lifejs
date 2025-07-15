@@ -17,8 +17,8 @@ export const memoryConfigSchema = z.object({
 });
 
 export type MemoryConfig<T extends "input" | "output"> = T extends "input"
-  ? { behavior?: "blocking" | "non-blocking" }
-  : { behavior: "blocking" | "non-blocking" };
+  ? z.input<typeof memoryConfigSchema>
+  : z.output<typeof memoryConfigSchema>;
 
 // - Definition
 export interface MemoryDefinition {
@@ -31,15 +31,15 @@ export interface MemoryDefinition {
 
 // - Builder
 export class MemoryDefinitionBuilder<const Definition extends MemoryDefinition> {
-  #def: Definition;
+  _definition: Definition;
 
   constructor(def: Definition) {
-    this.#def = def;
+    this._definition = def;
   }
 
   dependencies<Dependencies extends MemoryDependenciesDefinition>(dependencies: Dependencies) {
     return new MemoryDefinitionBuilder({
-      ...this.#def,
+      ...this._definition,
       dependencies: "_definition" in dependencies ? dependencies._definition : dependencies,
     }) as MemoryDefinitionBuilder<Definition & { dependencies: Dependencies }>;
   }
@@ -47,7 +47,7 @@ export class MemoryDefinitionBuilder<const Definition extends MemoryDefinition> 
   config(config: MemoryConfig<"input">) {
     const parsedConfig = memoryConfigSchema.parse(config);
     return new MemoryDefinitionBuilder({
-      ...this.#def,
+      ...this._definition,
       config: parsedConfig,
     });
   }
@@ -57,20 +57,16 @@ export class MemoryDefinitionBuilder<const Definition extends MemoryDefinition> 
     params: Message[] | ((params: { messages: Message[] }) => Message[] | Promise<Message[]>),
   ) {
     return new MemoryDefinitionBuilder({
-      ...this.#def,
+      ...this._definition,
       output: params,
     });
   }
   // biome-ignore lint/nursery/noShadow: expected here
   onHistoryChange(params: (params: { messages: Message[] }) => void) {
     return new MemoryDefinitionBuilder({
-      ...this.#def,
+      ...this._definition,
       onHistoryChange: params,
     });
-  }
-
-  _definition() {
-    return this.#def;
   }
 }
 

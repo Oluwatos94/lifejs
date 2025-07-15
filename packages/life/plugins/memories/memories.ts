@@ -10,7 +10,7 @@ async function buildMemory(
   memory: MemoryDefinitionBuilder<MemoryDefinition>,
   messages: Message[],
 ): Promise<Message[]> {
-  const { output } = memory._definition();
+  const { output } = memory._definition;
   if (typeof output === "function") return await output({ messages });
   return output ?? [];
 }
@@ -91,7 +91,7 @@ export const memoriesPlugin = definePlugin("memories")
 
       // Update each non-blocking memory asynchronously
       for (const item of config.items) {
-        const def = item._definition();
+        const def = item._definition;
         if (def.config.behavior !== "non-blocking") continue;
 
         // Fire and forget - don't await
@@ -136,7 +136,7 @@ export const memoriesPlugin = definePlugin("memories")
       // Build all blocking memories concurrently
       const blockingResults = new Map<number, Message[]>();
       const blockingPromises = config.items.map(async (item, index) => {
-        const def = item._definition();
+        const def = item._definition;
         if (def.config.behavior !== "blocking") return;
 
         const messages = await buildMemory(item, event.data.messages);
@@ -154,7 +154,7 @@ export const memoriesPlugin = definePlugin("memories")
         const item = config.items[i];
         if (!item) continue;
 
-        const def = item._definition();
+        const def = item._definition;
         if (def.config.behavior === "blocking") {
           const messages = blockingResults.get(i) ?? [];
           memoriesMessages.push(...messages);
