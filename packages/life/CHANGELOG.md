@@ -1,5 +1,14 @@
 # life
 
+## 0.10.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [e05db22](https://github.com/lifejs/lifejs/commit/e05db22eaf76f4617ed4fd389ee99913b26f117c) — Add an higher-level and typesafe RPC API to Transport classes
+- [@LilaRest](https://github.com/LilaRest) in [100a020](https://github.com/lifejs/lifejs/commit/100a020e9aa488e80f678c0a1e1d41e6989f1573) — New client-side config schema and types
+- [@LilaRest](https://github.com/LilaRest) in [9f72c47](https://github.com/lifejs/lifejs/commit/9f72c47df15197d2331062a7e82b635af62b2fae) — First functional version of client
+- [@LilaRest](https://github.com/LilaRest) in [a31a8b4](https://github.com/lifejs/lifejs/commit/a31a8b4a00edb76259c2c9a2efe15d403d172146) — Add support for ZodError serialization
+
 ## 0.9.0
 
 ### Minor Changes
