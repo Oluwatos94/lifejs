@@ -55,7 +55,7 @@ type RPCProcedure<Schema extends AnyZodFunction = AnyZodFunction> = {
 };
 
 // RPC transport
-export abstract class RPCTransport {
+export abstract class TransportRPC {
   #procedures = new Map<string, RPCProcedure<AnyZodFunction>>();
   #pendingResponses = new Map<string, (value: RPCResponseMessage) => Promise<void>>();
 

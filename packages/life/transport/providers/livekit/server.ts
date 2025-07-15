@@ -12,7 +12,7 @@ import {
 } from "@livekit/rtc-node";
 import { z } from "zod";
 import { getToken } from "@/transport/auth";
-import { ServerTransportBase, type ServerTransportEvent } from "../base/server";
+import { BaseServerTransportProvider, type ServerTransportEvent } from "../base/server";
 
 // - Config
 export const livekitServerConfigSchema = z.object({
@@ -28,7 +28,9 @@ export type LiveKitServerConfig<T extends "input" | "output"> = T extends "input
   : z.output<typeof livekitServerConfigSchema>;
 
 // - Transport
-export class LiveKitServerTransport extends ServerTransportBase<typeof livekitServerConfigSchema> {
+export class LiveKitServerTransport extends BaseServerTransportProvider<
+  typeof livekitServerConfigSchema
+> {
   isConnected = false;
   room: Room | null = null;
   listeners: Partial<

@@ -1,11 +1,11 @@
 import { ensureServer } from "@/shared/ensure-server";
 
-ensureServer("transport.index.server");
+ensureServer("transport.server");
 
 import { z } from "zod";
-import type { ServerTransportBase } from "./providers/base/server";
+import { TransportCommon } from "./common";
+import type { BaseServerTransportProvider } from "./providers/base/server";
 import { LiveKitServerTransport, livekitServerConfigSchema } from "./providers/livekit/server";
-import { RPCTransport } from "./rpc";
 
 // Providers
 export const serverTransportProviders = {
@@ -31,8 +31,8 @@ export const serverTransportProviderConfigSchema = z.discriminatedUnion(
 );
 
 // Transport
-export class TransportServer extends RPCTransport {
-  _provider: ServerTransportBase<z.AnyZodObject>;
+export class TransportServer extends TransportCommon {
+  _provider: BaseServerTransportProvider<z.AnyZodObject>;
 
   constructor(config: ServerTransportProviderConfig<"output">) {
     super();
@@ -41,23 +41,15 @@ export class TransportServer extends RPCTransport {
   }
 
   // Proxy base methods from the provider for simpler usage
-  on: ServerTransportBase<z.AnyZodObject>["on"] = (...args) => this._provider.on(...args);
-  joinRoom: ServerTransportBase<z.AnyZodObject>["joinRoom"] = (...args) =>
+  on: BaseServerTransportProvider<z.AnyZodObject>["on"] = (...args) => this._provider.on(...args);
+  joinRoom: BaseServerTransportProvider<z.AnyZodObject>["joinRoom"] = (...args) =>
     this._provider.joinRoom(...args);
-  leaveRoom: ServerTransportBase<z.AnyZodObject>["leaveRoom"] = (...args) =>
+  leaveRoom: BaseServerTransportProvider<z.AnyZodObject>["leaveRoom"] = (...args) =>
     this._provider.leaveRoom(...args);
-  streamText: ServerTransportBase<z.AnyZodObject>["streamText"] = (...args) =>
+  streamText: BaseServerTransportProvider<z.AnyZodObject>["streamText"] = (...args) =>
     this._provider.streamText(...args);
-  receiveStreamText: ServerTransportBase<z.AnyZodObject>["receiveStreamText"] = (...args) =>
+  receiveStreamText: BaseServerTransportProvider<z.AnyZodObject>["receiveStreamText"] = (...args) =>
     this._provider.receiveStreamText(...args);
-  sendText: ServerTransportBase<z.AnyZodObject>["sendText"] = (...args) =>
-    this._provider.sendText(...args);
-  receiveText: ServerTransportBase<z.AnyZodObject>["receiveText"] = (...args) =>
-    this._provider.receiveText(...args);
-  sendObject: ServerTransportBase<z.AnyZodObject>["sendObject"] = (...args) =>
-    this._provider.sendObject(...args);
-  receiveObject: ServerTransportBase<z.AnyZodObject>["receiveObject"] = (...args) =>
-    this._provider.receiveObject(...args);
-  streamAudioChunk: ServerTransportBase<z.AnyZodObject>["streamAudioChunk"] = (...args) =>
+  streamAudioChunk: BaseServerTransportProvider<z.AnyZodObject>["streamAudioChunk"] = (...args) =>
     this._provider.streamAudioChunk(...args);
 }

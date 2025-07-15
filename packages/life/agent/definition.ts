@@ -1,10 +1,10 @@
 import type { z } from "zod";
-import { type ConfigDefinition, defineConfig } from "@/config";
+import { defineConfig, type ServerConfig } from "@/config/server";
 import type { PluginConfig, PluginDefinition, PluginDefinitionBuilder } from "@/plugins/definition";
 
 export type AgentDefinition = {
   name: string;
-  config: ConfigDefinition<"output">;
+  config: ServerConfig<"output">;
   plugins: PluginDefinition[];
   pluginConfigs: Record<string, unknown>;
 };
@@ -32,7 +32,7 @@ export class AgentDefinitionBuilder<
     this._definition = definition;
   }
 
-  config(params: ConfigDefinition<"input">) {
+  config(params: ServerConfig<"input">) {
     // Create a new builder instance with the provided config
     const builder = new AgentDefinitionBuilder({
       ...this._definition,
@@ -101,7 +101,7 @@ export class AgentDefinitionBuilder<
 export function defineAgent<const Name extends string>(name: Name) {
   return new AgentDefinitionBuilder({
     name,
-    config: defineConfig({}).withDefaults as ConfigDefinition<"output">,
+    config: defineConfig({}).withDefaults as ServerConfig<"output">,
     plugins: [],
     pluginConfigs: {},
   });

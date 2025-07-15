@@ -1,4 +1,5 @@
 export { defineAgent } from "@/agent/definition";
+export { defineConfig } from "@/config/definition";
 export { definePlugin } from "@/plugins/definition";
 export { defineMemory } from "@/plugins/memories/definition";
 
