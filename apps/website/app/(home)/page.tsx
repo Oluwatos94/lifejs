@@ -175,8 +175,8 @@ export default function Page() {
             >
               <Image
                 alt="Code Example"
-                className="-mt-29 -mb-34 pointer-events-none"
-                height={450}
+                className="-mt-29 -mb-34 pointer-events-none h-[450px] w-auto"
+                height={600}
                 src={codeSnippet}
               />
             </motion.div>

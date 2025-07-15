@@ -1,10 +1,14 @@
 import { WebsiteHeader } from "@/components/website-header";
 import "./global.css";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import { RootProvider } from "fumadocs-ui/provider";
 import { GeistMono } from "geist/font/mono";
+import type { Metadata } from "next";
 import { Gloria_Hallelujah } from "next/font/google";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
+
+/* Fonts */
 
 const sfProDisplay = localFont({
   src: "../public/fonts/sfprodisplay-medium.otf",
@@ -38,6 +42,54 @@ const gloriaHallelujah = Gloria_Hallelujah({
   variable: "--font-gloria-hallelujah",
 });
 
+/* Metadata */
+
+const name = "Life.js";
+const description =
+  "Life.js is the first-ever fullstack framework to build agentic web applications. It is minimal, extensible, and typesafe. Well, everything you love.";
+const url = "https://lifejs.org";
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
+export const metadata: Metadata = {
+  metadataBase: new URL(url),
+  applicationName: name,
+  title: {
+    template: `${name} • %s`,
+    default: "Untitled Page",
+  },
+  description,
+  keywords: [
+    "react",
+    "framework",
+    "typescript",
+    "fullstack",
+    "agents",
+    "agentic",
+    "life",
+    "nextjs",
+  ],
+  openGraph: {
+    title: `${name}`,
+    description,
+    siteName: name,
+    locale: "en_US",
+    type: "website",
+    url,
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@lifejs_org",
+    creator: "@lifejs_org",
+    title: `${name}`,
+    description,
+  },
+};
+
 export default function Layout({ children }: { children: ReactNode }) {
   return (
     <html
@@ -50,6 +102,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <WebsiteHeader />
           {children}
         </RootProvider>
+        <GoogleAnalytics gaId="G-SLGSBMQZ3J" />
       </body>
     </html>
   );

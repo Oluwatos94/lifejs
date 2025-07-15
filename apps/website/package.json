@@ -10,6 +10,7 @@
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
+    "@next/third-parties": "^15.4.1",
     "@radix-ui/react-slot": "^1.2.3",
     "@remixicon/react": "^4.6.0",
     "class-variance-authority": "^0.7.1",
@@ -22,7 +23,7 @@
     "lucide-react": "^0.525.0",
     "motion": "^12.23.3",
     "motion-plus": "^1.4.1",
-    "next": "15.3.5",
+    "next": "^15.4.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tailwind-capsize": "^1.0.3",
