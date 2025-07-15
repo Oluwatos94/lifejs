@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { defineConfig, type ServerConfig } from "@/config/server";
-import type { PluginConfig, PluginDefinition, PluginDefinitionBuilder } from "@/plugins/definition";
+import type { PluginConfig, PluginDefinition } from "@/plugins/definition";
 
 export type AgentDefinition = {
   name: string;
@@ -46,10 +46,7 @@ export class AgentDefinitionBuilder<
     >;
   }
 
-  plugins<
-    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-    const Plugins extends readonly { _definition: PluginDefinitionBuilder<any>["_definition"] }[],
-  >(plugins: Plugins) {
+  plugins<const Plugins extends readonly { _definition: PluginDefinition }[]>(plugins: Plugins) {
     // Create a new builder instance with the provided plugins
     const pluginDefs = plugins.map((p) => p._definition);
     const builder = new AgentDefinitionBuilder({

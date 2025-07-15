@@ -3,11 +3,11 @@ import { type Message, messageSchema } from "@/agent/resources";
 import { definePlugin } from "@/plugins/definition";
 import { sha256 } from "@/shared/stable-sha256";
 import { corePlugin } from "../core/core";
-import { type MemoryDefinition, MemoryDefinitionBuilder } from "./definition";
+import type { MemoryDefinition } from "./definition";
 
 // Helper function to build a memory and get its output messages
 async function buildMemory(
-  memory: MemoryDefinitionBuilder<MemoryDefinition>,
+  memory: { _definition: MemoryDefinition },
   messages: Message[],
 ): Promise<Message[]> {
   const { output } = memory._definition;
@@ -25,7 +25,7 @@ export const memoriesPlugin = definePlugin("memories")
   ])
   .config(
     z.object({
-      items: z.array(z.instanceof(MemoryDefinitionBuilder)).default([]),
+      items: z.array(z.custom<{ _definition: MemoryDefinition }>()).default([]),
     }),
   )
   .events({
