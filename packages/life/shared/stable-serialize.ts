@@ -1,5 +1,18 @@
 import superjson from "superjson";
-import { z } from "zod";
+import { ZodError, z } from "zod";
+
+// Register custom transformer for ZodError to preserve all error information
+// We use unknown[] as the serialized type since ZodIssue has complex union types
+// that don't satisfy SuperJSON's JSONValue constraints
+// biome-ignore lint/suspicious/noExplicitAny: z.ZodIssue[] is not a valid JSONValue, but is serializable
+superjson.registerCustom<ZodError, any>(
+  {
+    isApplicable: (v): v is ZodError => v instanceof ZodError,
+    serialize: (zErr) => zErr.issues,
+    deserialize: (data) => new ZodError(data as z.ZodIssue[]),
+  },
+  "ZodError",
+);
 
 // - Primitive types
 const serializablePrimitivesSchema = z.union([
@@ -49,7 +62,7 @@ export type SerializableValue =
 export const serialize = (value: SerializableValue): string => {
   // - Serialize with SuperJSON
   const superJsonOutput = superjson.stringify(value);
-  const serializedObject = superjson.parse(superJsonOutput);
+  const serializedObject = JSON.parse(superJsonOutput);
 
   // - Stringify again with stable keys order
   return stableDeepStringify(serializedObject);
