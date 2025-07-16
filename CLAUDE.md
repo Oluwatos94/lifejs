@@ -32,7 +32,7 @@ It notably includes the landing pages, the framework documentation, and communit
 ### Life Package (`packages/life/`)
 This is the main package of the monorepo, containing the entire Life.js framework (`npm install life`).
 Here is an overview of its sub-folders:
-- `agent/` — Provides agent definition (`defineAgent()`) and runner.
+- `agent/` — Provides agent definition (`defineAgent()`) and server.
 - `transport/` — Abstracts complex WebRTC/streaming logic behind a simple `Transport` class.
 - `models/` — Offer a unified API to interact with various LLM/TTS/STT/EOU/VAD providers.
 - `config/` — Contains the schema of agents configuration used by global config (`life.config.ts` file) and local configs (defineAgent().config(...))

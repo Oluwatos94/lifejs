@@ -4,9 +4,9 @@ export { definePlugin } from "@/plugins/definition";
 export { defineMemory } from "@/plugins/memories/definition";
 export { defineStore } from "@/plugins/stores/definition";
 
-import { corePlugin } from "@/plugins/core/core";
-import { memoriesPlugin } from "@/plugins/memories/memories";
-import { storesPlugin } from "@/plugins/stores/stores";
+import { corePlugin } from "@/plugins/core/server";
+import { memoriesPlugin } from "@/plugins/memories/server";
+import { storesPlugin } from "@/plugins/stores/server";
 
 export const defaults = {
   plugins: {

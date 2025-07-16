@@ -1,6 +1,7 @@
-import type { Agent } from "@/agent/agent";
+import type { AgentServer } from "@/agent/server";
 import type {
   EmitFunction,
+  PluginApiDefinition,
   PluginConfig,
   PluginConfigDefinition,
   PluginContext,
@@ -11,10 +12,10 @@ import type {
   PluginEvent,
   PluginEventsDefinition,
   PluginInterceptorFunction,
-  PluginMethodsDef,
   ReadonlyPluginContext,
   WritablePluginContext,
 } from "@/plugins/definition";
+import { PluginApiBase } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
 import { klona } from "@/shared/klona";
 import { newId } from "@/shared/prefixed-id";
@@ -22,19 +23,19 @@ import { equal } from "@/shared/stable-equal";
 import type { SerializableValue } from "@/shared/stable-serialize";
 
 type PluginExternalInterceptor<TDefinition extends PluginDefinition = PluginDefinition> = {
-  runner: PluginRunner<TDefinition>;
+  server: PluginServer<TDefinition>;
   interceptor: PluginInterceptorFunction<
     PluginDependenciesDefinition,
     PluginEventsDefinition,
     PluginConfigDefinition,
     PluginContextDefinition,
-    PluginMethodsDef | undefined
+    PluginApiDefinition
   >;
 };
 
-// - Runner
-export class PluginRunner<const Definition extends PluginDefinition> {
-  #agent: Agent;
+// - Server
+export class PluginServer<const Definition extends PluginDefinition> {
+  #agent: AgentServer;
   #definition: Definition;
   #config: PluginConfig<Definition["config"], "output">;
   #context: PluginContext<Definition["context"], "output">;
@@ -44,34 +45,32 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     lastValue: SerializableValue;
   }>();
   #externalInterceptors: PluginExternalInterceptor<PluginDefinition>[] = [];
-  // biome-ignore lint/suspicious/noExplicitAny: we don't know the methods args types
-  #finalMethods: Record<string, (...args: any[]) => unknown | Promise<unknown>> = {};
   #queue: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">> = new AsyncQueue<
     PluginEvent<PluginEventsDefinition, "output">
   >();
   #servicesQueues: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">>[] = [];
+  api: PluginApiBase<Definition["events"], Definition["config"], Definition["context"]>;
 
-  constructor(agent: Agent, def: Definition, config: PluginConfig<Definition["config"], "output">) {
+  constructor(
+    agent: AgentServer,
+    def: Definition,
+    config: PluginConfig<Definition["config"], "output">,
+  ) {
     this.#agent = agent;
     this.#definition = def;
     this.#config = config;
-    this.#context = def.context.parse({});
+    this.#context = def.context.schema.parse(def.context.initial);
 
-    for (const [methodName, methodDef] of Object.entries(this.#definition.methods ?? {})) {
-      const method = methodDef.run.bind(this, {
-        agent: this.#agent,
-        config: this.#config,
-        context: this.#createReadonlyContext(),
-        emit: this.emit.bind(this) as EmitFunction,
-      });
-      this.#finalMethods[methodName] = method;
-    }
-
-    Object.assign(this, this.#finalMethods);
-  }
-
-  get methods() {
-    return this.#finalMethods;
+    // Initialize api if defined
+    const ApiClass =
+      this.#definition.api && "implementation" in this.#definition.api
+        ? this.#definition.api.implementation(PluginApiBase, this.#definition.api.schema)
+        : PluginApiBase;
+    this.api = new ApiClass({
+      config: this.#config,
+      context: this.#createReadonlyContext(),
+      emit: this.emit.bind(this) as EmitFunction,
+    });
   }
 
   // Create read-only context with onChange and get
@@ -184,15 +183,15 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     const dependencies: Record<string, unknown> = {};
 
     for (const [depName, depDef] of Object.entries(this.#definition.dependencies ?? {})) {
-      const depRunner = this.#agent.plugins[depName];
-      if (!depRunner) continue;
+      const depServer = this.#agent.plugins[depName];
+      if (!depServer) continue;
 
       dependencies[depName] = {
         events: depDef.events,
-        methods: depRunner.methods,
-        config: depRunner.#config,
-        context: depRunner.#createReadonlyContext(),
-        emit: depRunner.emit.bind(depRunner),
+        api: depServer.api,
+        config: depServer.#config,
+        context: depServer.#createReadonlyContext(),
+        emit: depServer.emit.bind(depServer),
       };
     }
 
@@ -215,7 +214,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
         queue: queue[Symbol.asyncIterator](),
         config: this.#config,
         context: readonlyContext,
-        methods: this.#finalMethods,
+        api: this.api,
         emit: this.emit.bind(this) as EmitFunction,
         dependencies,
       });
@@ -225,10 +224,10 @@ export class PluginRunner<const Definition extends PluginDefinition> {
     for (const interceptor of Object.values(this.#definition.interceptors ?? {})) {
       // Register this interceptor with each dependency it intercepts
       for (const depName of Object.keys(this.#definition.dependencies ?? {})) {
-        const dependentRunner = this.#agent.plugins[depName];
-        if (dependentRunner) {
-          dependentRunner.registerExternalInterceptor({
-            runner: this as unknown as PluginRunner<PluginDefinition>,
+        const dependentServer = this.#agent.plugins[depName];
+        if (dependentServer) {
+          dependentServer.registerExternalInterceptor({
+            server: this as unknown as PluginServer<PluginDefinition>,
             interceptor,
           });
         }
@@ -294,7 +293,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
 
         // 1. Run external interceptors
         let isDropped = false;
-        for (const { interceptor, runner } of this.#externalInterceptors) {
+        for (const { interceptor, server } of this.#externalInterceptors) {
           const drop = (_reason: string) => (isDropped = true);
           const next = (newEvent: PluginEvent<PluginEventsDefinition, "output">) => {
             event = newEvent;
@@ -308,7 +307,8 @@ export class PluginRunner<const Definition extends PluginDefinition> {
             dependency: {
               name: this.#definition.name,
               events: this.#definition.events,
-              methods: this.#finalMethods,
+              // @ts-expect-error
+              api: this.api,
               // @ts-expect-error
               config: this.#config,
               // @ts-expect-error
@@ -316,10 +316,10 @@ export class PluginRunner<const Definition extends PluginDefinition> {
               emit: this.emit.bind(this) as EmitFunction,
             },
             current: {
-              emit: runner.emit.bind(runner) as EmitFunction,
-              context: runner.#createReadonlyContext(),
-              methods: runner.#finalMethods,
-              config: runner.#config,
+              emit: server.emit.bind(server) as EmitFunction,
+              context: server.#createReadonlyContext(),
+              api: server.api,
+              config: server.#config,
             },
           });
           if (isDropped) break;
@@ -335,7 +335,7 @@ export class PluginRunner<const Definition extends PluginDefinition> {
             event: klona(event),
             config: this.#config,
             context: this.#createWritableContext(),
-            methods: this.#finalMethods,
+            api: this.api,
             emit: this.emit.bind(this) as EmitFunction<Definition["events"]>,
             dependencies,
           });

@@ -56,12 +56,12 @@
     },
     "./client": {
       "import": {
-        "types": "./dist/client/client.d.ts",
-        "default": "./dist/client/client.mjs"
+        "types": "./dist/agent/client.d.ts",
+        "default": "./dist/agent/client.mjs"
       },
       "require": {
-        "types": "./dist/client/client.d.ts",
-        "default": "./dist/client/client.js"
+        "types": "./dist/agent/client.d.ts",
+        "default": "./dist/agent/client.js"
       }
     },
     "./auth": {
@@ -88,6 +88,7 @@
     "react": "^19",
     "superjson": "^2.2.2",
     "to-words": "^4.7.0",
+    "yjs": "^13.6.27",
     "zod": "^3.25.58",
     "zod-to-json-schema": "^3.24.6"
   },

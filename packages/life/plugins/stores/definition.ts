@@ -1,15 +1,25 @@
 import { z } from "zod";
+import type { serializableValueSchema } from "@/shared/stable-serialize";
 
 // - Config
-export const controlledStoreConfigSchema = z.object({
+const commonStoreConfigSchema = z.object({
+  schema: z.custom<
+    | z.ZodRecord<z.ZodString, typeof serializableValueSchema>
+    | z.ZodArray<typeof serializableValueSchema>
+  >((val) => {
+    if (val instanceof z.ZodArray || val instanceof z.ZodRecord) return true;
+    return false;
+  }),
+});
+
+export const controlledStoreConfigSchema = commonStoreConfigSchema.extend({
   type: z.literal("controlled"),
-  schema: z.instanceof(z.ZodType),
+
   ttl: z.number().optional(),
 });
 
-export const freeformStoreConfigSchema = z.object({
+export const freeformStoreConfigSchema = commonStoreConfigSchema.extend({
   type: z.literal("freeform"),
-  schema: z.instanceof(z.ZodType),
 });
 
 export const storeConfigSchema = z.union([controlledStoreConfigSchema, freeformStoreConfigSchema]);

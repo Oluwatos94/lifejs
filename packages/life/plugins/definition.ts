@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Agent } from "@/agent/agent";
+import type { AgentServer } from "@/agent/server";
 import type { AsyncQueue } from "@/shared/async-queue";
 import type { SerializableValue } from "@/shared/stable-serialize";
 
@@ -10,10 +10,6 @@ depth by replacing many nested types with 'any' (not the top-level ones though, 
 typesafe experience).
 */
 
-// Type alias for any Zod function schema - more readable than z.ZodFunction<any, any>
-// biome-ignore lint/suspicious/noExplicitAny: Required for flexible function type matching
-type AnyZodFunction = z.ZodFunction<any, any>;
-
 // - Common
 export type EmitFunction<EventsDef extends PluginEventsDefinition = PluginEventsDefinition> = (
   event: PluginEvent<EventsDef, "input">,
@@ -22,23 +18,23 @@ export type EmitFunction<EventsDef extends PluginEventsDefinition = PluginEvents
 // - Dependencies
 export type PluginDependencyDefinition = {
   events: PluginEventsDefinition;
-  methods: Record<string, AnyZodFunction>;
   config?: PluginConfigDefinition;
   context?: PluginContextDefinition;
+  api?: PluginApiDefinition;
 };
 export type PluginDependenciesDefinition = Record<string, PluginDependencyDefinition>;
 export type PluginDependencies<Defs extends PluginDependenciesDefinition> = {
   [K in keyof Defs]: {
     events: Defs[K]["events"];
-    methods: {
-      [M in keyof Defs[K]["methods"]]: z.infer<Defs[K]["methods"][M]>;
-    };
     config: Defs[K]["config"] extends PluginConfigDefinition
       ? PluginConfig<Defs[K]["config"], "output">
       : Readonly<Record<string, never>>;
     context: Defs[K]["context"] extends PluginContextDefinition
       ? ReadonlyPluginContext<PluginContext<Defs[K]["context"], "output">>
       : ReadonlyPluginContext<Record<string, never>>;
+    api: Defs[K]["api"] extends PluginApiDefinition
+      ? PluginApi<Defs[K]["api"]>
+      : Readonly<Record<string, never>>;
     emit: EmitFunction<
       Defs[K]["events"] extends PluginEventsDefinition ? Defs[K]["events"] : Record<string, never>
     >;
@@ -53,13 +49,15 @@ export type PluginConfig<
 > = Readonly<T extends "input" ? z.input<Def> : z.output<Def>>;
 
 // - Context
-export type PluginContextDefinition = z.AnyZodObject;
+export type PluginContextDefinition<Schema extends z.AnyZodObject = z.AnyZodObject> = {
+  schema: Schema;
+  initial: z.input<Schema>;
+};
 export type PluginContext<
   Def extends PluginContextDefinition,
   T extends "input" | "output",
-> = T extends "input" ? z.input<Def> : z.output<Def>;
+> = T extends "input" ? z.input<Def["schema"]> : z.output<Def["schema"]>;
 
-// Context API types
 export type ReadonlyPluginContext<T> = {
   onChange<R extends SerializableValue>(
     selector: (context: T) => R,
@@ -89,37 +87,52 @@ export type PluginEvent<EventsDef extends PluginEventsDefinition, T extends "inp
           ? z.input<EventsDef[K]["dataSchema"]>
           : z.output<EventsDef[K]["dataSchema"]>;
       }
-    : // biome-ignore lint/complexity/noBannedTypes: <explanation>
+    : // biome-ignore lint/complexity/noBannedTypes: empty object type needed for conditional
       {}) &
     (T extends "output"
       ? { id: string }
-      : // biome-ignore lint/complexity/noBannedTypes: <explanation>
+      : // biome-ignore lint/complexity/noBannedTypes: empty object type needed for conditional
         {});
 }[keyof EventsDef];
 
-// - Methods
-// Type for method schemas definition (the new format with schema + run)
-export type PluginMethodsDef = Record<
-  string,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for flexible function signatures
-  { schema: AnyZodFunction; run: (...args: any[]) => any }
->;
+// - API
+export interface PluginApiDefinition<
+  Schema extends z.AnyZodObject = z.AnyZodObject,
+  EventsDef extends PluginEventsDefinition = PluginEventsDefinition,
+  ConfigDef extends PluginConfigDefinition = PluginConfigDefinition,
+  ContextDef extends PluginContextDefinition = PluginContextDefinition,
+> {
+  schema: Schema;
+  implementation: (
+    Base: typeof PluginApiBase<EventsDef, ConfigDef, ContextDef>,
+    schema: Schema,
+  ) => new (
+    raw: PluginApiConnector<EventsDef, ConfigDef, ContextDef>,
+  ) => PluginApiBase<EventsDef, ConfigDef, ContextDef> & z.TypeOf<Schema>;
+}
 
-// Type to extract methods from method definitions
-export type PluginMethods<MethodsDef extends PluginMethodsDef | undefined> =
-  MethodsDef extends PluginMethodsDef
-    ? {
-        [K in keyof MethodsDef]: MethodsDef[K]["schema"] extends z.ZodFunction<
-          infer TArgs,
-          infer TReturns
-        >
-          ? (
-              ...args: z.infer<TArgs> extends readonly unknown[] ? z.infer<TArgs> : never
-            ) => z.infer<TReturns> | Promise<z.infer<TReturns>>
-          : never;
-      }
-    : // biome-ignore lint/complexity/noBannedTypes: <explanation>
-      {};
+export type PluginApi<Def extends PluginApiDefinition> = z.TypeOf<Def["schema"]>;
+
+export type PluginApiConnector<
+  EventsDef extends PluginEventsDefinition,
+  ConfigDef extends PluginConfigDefinition,
+  ContextDef extends PluginContextDefinition,
+> = {
+  context: ReadonlyPluginContext<PluginContext<ContextDef, "output">>;
+  config: PluginConfig<ConfigDef, "output">;
+  emit: EmitFunction<EventsDef>;
+};
+
+export class PluginApiBase<
+  EventsDef extends PluginEventsDefinition = PluginEventsDefinition,
+  ConfigDef extends PluginConfigDefinition = PluginConfigDefinition,
+  ContextDef extends PluginContextDefinition = PluginContextDefinition,
+> {
+  raw: PluginApiConnector<EventsDef, ConfigDef, ContextDef>;
+  constructor(raw: PluginApiConnector<EventsDef, ConfigDef, ContextDef>) {
+    this.raw = raw;
+  }
+}
 
 // - Lifecycle
 export type PluginLifecycle<
@@ -151,13 +164,13 @@ export type PluginEffectFunction<
   EventsDef extends PluginEventsDefinition,
   ConfigDef extends PluginConfigDefinition,
   ContextDef extends PluginContextDefinition,
-  MethodsDef extends PluginMethodsDef | undefined,
+  ApiDef extends PluginApiDefinition,
 > = (params: {
   event: PluginEvent<EventsDef, "output">;
-  agent: Agent;
+  agent: AgentServer;
   config: PluginConfig<ConfigDef, "output">;
   context: WritablePluginContext<PluginContext<ContextDef, "output">>;
-  methods: PluginMethods<MethodsDef>;
+  api: PluginApi<ApiDef>;
   dependencies: PluginDependencies<DependenciesDef>;
   emit: EmitFunction<EventsDef>;
 }) => void | Promise<void>;
@@ -168,13 +181,13 @@ export type PluginServiceFunction<
   EventsDef extends PluginEventsDefinition,
   ConfigDef extends PluginConfigDefinition,
   ContextDef extends PluginContextDefinition,
-  MethodsDef extends PluginMethodsDef | undefined,
+  ApiDef extends PluginApiDefinition,
 > = (params: {
   queue: AsyncQueue<PluginEvent<EventsDef, "output">>;
-  agent: Agent;
+  agent: AgentServer;
   config: PluginConfig<ConfigDef, "output">;
   context: ReadonlyPluginContext<PluginContext<ContextDef, "output">>;
-  methods: PluginMethods<MethodsDef>;
+  api: PluginApi<ApiDef>;
   dependencies: PluginDependencies<DependenciesDef>;
   emit: EmitFunction<EventsDef>;
 }) => void | Promise<void>;
@@ -185,7 +198,7 @@ export type PluginInterceptorFunction<
   EventsDef extends PluginEventsDefinition,
   ConfigDef extends PluginConfigDefinition,
   ContextDef extends PluginContextDefinition,
-  MethodsDef extends PluginMethodsDef | undefined,
+  ApiDef extends PluginApiDefinition,
 > = (params: {
   event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">;
   next: (event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">) => void;
@@ -196,7 +209,7 @@ export type PluginInterceptorFunction<
   current: {
     emit: EmitFunction<EventsDef>;
     context: ReadonlyPluginContext<PluginContext<ContextDef, "output">>;
-    methods: PluginMethods<MethodsDef>;
+    api: PluginApi<ApiDef>;
     config: PluginConfig<ConfigDef, "output">;
   };
 }) => void | Promise<void>;
@@ -208,7 +221,7 @@ export interface PluginDefinition {
   config: PluginConfigDefinition;
   context: PluginContextDefinition;
   events: PluginEventsDefinition;
-  methods: PluginMethodsDef;
+  api: PluginApiDefinition;
   lifecycle: PluginLifecycle<
     PluginConfigDefinition,
     PluginContextDefinition,
@@ -221,7 +234,7 @@ export interface PluginDefinition {
       PluginEventsDefinition,
       PluginConfigDefinition,
       PluginContextDefinition,
-      PluginMethodsDef | undefined
+      PluginApiDefinition
     >
   >;
   services: Record<
@@ -231,7 +244,7 @@ export interface PluginDefinition {
       PluginEventsDefinition,
       PluginConfigDefinition,
       PluginContextDefinition,
-      PluginMethodsDef | undefined
+      PluginApiDefinition
     >
   >;
   interceptors: Record<
@@ -241,7 +254,7 @@ export interface PluginDefinition {
       PluginEventsDefinition,
       PluginConfigDefinition,
       PluginContextDefinition,
-      PluginMethodsDef | undefined
+      PluginApiDefinition
     >
   >;
 }
@@ -260,10 +273,7 @@ export class PluginDefinitionBuilder<
     this._definition = def;
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: Required for plugin builder type flexibility
-  dependencies<const Plugins extends PluginDefinitionBuilder<any, any, any, any, any>[]>(
-    plugins: Plugins,
-  ) {
+  dependencies<const Plugins extends { _definition: PluginDefinition }[]>(plugins: Plugins) {
     // Convert array of plugin builders to dependencies definition
     const dependencies: PluginDependenciesDefinition = {};
 
@@ -271,21 +281,11 @@ export class PluginDefinitionBuilder<
       const def = plugin._definition;
       const name = def.name;
 
-      // Extract methods with their schemas
-      const methods: Record<string, AnyZodFunction> = {};
-      if (def.methods) {
-        for (const [methodName, methodDef] of Object.entries(def.methods)) {
-          if (methodDef && typeof methodDef === "object" && "schema" in methodDef) {
-            methods[methodName] = methodDef.schema as AnyZodFunction;
-          }
-        }
-      }
-
       dependencies[name] = {
         events: def.events || {},
-        methods,
         config: def.config,
         context: def.context || {},
+        api: def.api,
       };
     }
 
@@ -293,13 +293,9 @@ export class PluginDefinitionBuilder<
     type ExtractedDependencies = {
       [K in Plugins[number] as K["_definition"]["name"]]: {
         events: K["_definition"]["events"];
-        methods: K["_definition"]["methods"] extends PluginMethodsDef
-          ? {
-              [M in keyof K["_definition"]["methods"]]: K["_definition"]["methods"][M]["schema"];
-            }
-          : Record<string, never>;
         config: K["_definition"]["config"];
         context: K["_definition"]["context"];
+        api: K["_definition"]["api"];
       };
     };
 
@@ -330,12 +326,12 @@ export class PluginDefinitionBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods | "config">;
   }
 
-  context<ContextDef extends PluginContextDefinition>(context: ContextDef) {
+  context<Schema extends z.AnyZodObject>(context: PluginContextDefinition<Schema>) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       context,
     }) as PluginDefinitionBuilder<
-      Definition & { context: ContextDef },
+      Definition & { context: PluginContextDefinition<Schema> },
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,
@@ -358,39 +354,25 @@ export class PluginDefinitionBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods | "events">;
   }
 
-  methods<const Schemas extends Record<string, AnyZodFunction>>(
-    schemasAndImplementations: {
-      [K in keyof Schemas]: {
-        schema: Schemas[K];
-        run: Schemas[K] extends z.ZodFunction<infer TArgs, infer TReturns>
-          ? (
-              params: {
-                agent: Agent;
-                config: PluginConfig<Definition["config"], "output">;
-                context: ReadonlyPluginContext<PluginContext<Definition["context"], "output">>;
-                emit: EmitFunction<Definition["events"]>;
-              },
-              ...args: z.infer<TArgs> extends readonly unknown[] ? z.infer<TArgs> : never
-            ) => z.infer<TReturns> | Promise<z.infer<TReturns>>
-          : never;
-      };
-    },
+  api<const Schema extends z.AnyZodObject>(
+    api: PluginApiDefinition<
+      Schema,
+      Definition["events"],
+      Definition["config"],
+      Definition["context"]
+    >,
   ) {
-    // Keep the original format and let the builder handle the conversion
-    const methodsWithSchemas = schemasAndImplementations;
-
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
-      // Store the full method definitions including schemas
-      methods: methodsWithSchemas,
+      api,
     }) as PluginDefinitionBuilder<
-      Definition & { methods: typeof methodsWithSchemas },
+      Definition & { api: PluginApiDefinition<Schema> },
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,
-      ExcludedMethods | "methods"
+      ExcludedMethods | "api"
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods | "methods">;
+    return plugin as Omit<typeof plugin, ExcludedMethods | "api">;
   }
 
   lifecycle<
@@ -420,7 +402,7 @@ export class PluginDefinitionBuilder<
       Definition["events"],
       Definition["config"],
       Definition["context"],
-      Definition["methods"]
+      Definition["api"]
     >,
   ) {
     const plugin = new PluginDefinitionBuilder({
@@ -458,7 +440,7 @@ export class PluginDefinitionBuilder<
       Definition["events"],
       Definition["config"],
       Definition["context"],
-      Definition["methods"]
+      Definition["api"]
     >,
   ) {
     const plugin = new PluginDefinitionBuilder({
@@ -496,7 +478,7 @@ export class PluginDefinitionBuilder<
       Definition["events"],
       Definition["config"],
       Definition["context"],
-      Definition["methods"]
+      Definition["api"]
     >,
   ) {
     const plugin = new PluginDefinitionBuilder({
@@ -530,10 +512,8 @@ export class PluginDefinitionBuilder<
   pick<
     const Options extends {
       events?: Array<keyof Definition["events"]>;
-      methods?: Array<keyof Definition["methods"]>;
-      context?: Definition["context"] extends z.ZodObject<infer Shape extends z.ZodRawShape>
-        ? Array<keyof Shape>
-        : never;
+      api?: Array<keyof Definition["api"]["schema"]["shape"]>;
+      context?: Array<keyof Definition["context"]["schema"]["shape"]>;
       config?: boolean;
     },
   >(options: Options) {
@@ -546,20 +526,22 @@ export class PluginDefinitionBuilder<
     type PickedDefinition = {
       name: Definition["name"];
       dependencies: Definition["dependencies"];
-      config: Options["config"] extends true
-        ? Definition["config"]
-        : z.ZodObject<Record<string, never>>;
-      context: Options["context"] extends readonly (infer K)[]
-        ? Definition["context"] extends z.ZodObject<infer Shape extends z.ZodRawShape>
-          ? z.ZodObject<Pick<Shape, K extends keyof Shape ? K : never>>
-          : Definition["context"]
-        : Definition["context"];
-      events: Options["events"] extends readonly (keyof Definition["events"])[]
+      config: Options["config"] extends true ? Definition["config"] : never;
+      events: Options["events"] extends readonly string[]
         ? Pick<Definition["events"], Options["events"][number]>
-        : Definition["events"];
-      methods: Options["methods"] extends readonly (keyof Definition["methods"])[]
-        ? Pick<Definition["methods"], Options["methods"][number]>
-        : Definition["methods"];
+        : never;
+      context: Options["context"] extends readonly string[]
+        ? Omit<Definition["context"], "schema"> & {
+            schema: z.ZodObject<
+              Pick<Definition["context"]["schema"]["shape"], Options["context"][number]>
+            >;
+          }
+        : never;
+      api: Options["api"] extends readonly string[]
+        ? Omit<Definition["api"], "schema"> & {
+            schema: z.ZodObject<Pick<Definition["api"]["schema"]["shape"], Options["api"][number]>>;
+          }
+        : never;
       lifecycle: Definition["lifecycle"];
       effects: Definition["effects"];
       services: Definition["services"];
@@ -581,9 +563,15 @@ export function definePlugin<const Name extends string>(name: Name) {
     name,
     dependencies: {},
     config: z.object({}),
-    context: z.object({}),
+    context: {
+      schema: z.object({}),
+      initial: {},
+    },
     events: {},
-    methods: {},
+    api: {
+      schema: z.object({}),
+      implementation: (Base) => class extends Base {},
+    },
     lifecycle: {},
     effects: {},
     interceptors: {},
