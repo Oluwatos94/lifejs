@@ -85,10 +85,10 @@
     "livekit-client": "^2.15.2",
     "livekit-server-sdk": "^2.13.1",
     "onnxruntime-node": "^1.22.0-rev",
-    "react": "^19",
+    "react": "^19.1.0",
     "superjson": "^2.2.2",
     "to-words": "^4.7.0",
-    "zod": "^3.25.58",
+    "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
@@ -96,7 +96,7 @@
     "@deepgram/sdk": "4.9.1",
     "@mistralai/mistralai": "^1.7.4",
     "@types/bun": "^1.2.18",
-    "openai": "^5.9.0",
+    "openai": "^5.9.2",
     "tsup": "^8.5.0"
   },
   "peerDependencies": {

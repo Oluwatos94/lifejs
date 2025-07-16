@@ -1,0 +1,135 @@
+# Rime TTS Provider
+
+The Rime provider enables you to use Rime's high-quality text-to-speech models in your Life.js agent.
+
+## Configuration
+
+```typescript
+import { Agent } from "life/agent";
+
+const agent = new Agent({
+  tts: {
+    provider: "rime",
+    apiKey: "your-api-key", // Or set RIME_API_KEY environment variable
+    model: "arcana", // Default model
+    speaker: "default", // Voice/speaker selection
+    temperature: 0.5, // Controls randomness (0.0 to 2.0)
+    topP: 0.5, // Controls diversity (0.0 to 1.0)
+    repetitionPenalty: 1.5, // Controls repetition (0.0 to 2.0)
+    maxTokens: 1200, // Maximum tokens per request
+  },
+  // ... other config
+});
+```
+
+## Environment Variables
+
+Set your Rime API key as an environment variable:
+
+```bash
+export RIME_API_KEY="your-api-key"
+```
+
+## Available Models
+
+| Model | Description |
+|-------|-------------|
+| `arcana` | Rime's most expressive and lifelike TTS model (default) |
+| `mistv2` | Multi-language support with enhanced features |
+| `mist` | Legacy model, still supported |
+
+## Configuration Schema
+
+```typescript
+{
+  apiKey: string;           // Rime API key (required)
+  model: string;            // Model name (see table above)
+  speaker: string;          // Voice/speaker selection
+  temperature: number;      // 0.0 to 2.0, controls randomness
+  topP: number;            // 0.0 to 1.0, controls diversity
+  repetitionPenalty: number; // 0.0 to 2.0, controls repetition
+  maxTokens: number;       // 1 to 1200, maximum tokens per request
+  baseUrl: string;         // API base URL (default: https://users.rime.ai/v1)
+}
+```
+
+## Features
+
+- ✅ Streaming audio synthesis
+- ✅ High-quality, expressive speech
+- ✅ Multiple voice options
+- ✅ Low latency streaming
+- ✅ Emotional depth and naturalness
+- ✅ Fine-grained control over prosody
+
+## Getting Started
+
+1. **Get your API key**: Visit [rime.ai](https://rime.ai) to obtain your Rime API key
+2. **Set environment variable**: `export RIME_API_KEY="your-key-here"`
+3. **Configure your agent**: Use the configuration example above
+4. **Start building**: Your agent is now ready to use Rime TTS!
+
+## Example Usage
+
+```typescript
+import { Agent } from "life/agent";
+
+const agent = new Agent({
+  tts: {
+    provider: "rime",
+    model: "arcana",
+    speaker: "default",
+    temperature: 0.7,
+    topP: 0.8,
+  },
+});
+
+// The agent will now use Rime TTS for all speech synthesis
+```
+
+## Voice Selection
+
+Rime offers a diverse set of voices across different demographics, ages, and styles. You can:
+
+- Use default voices by setting `speaker: "default"`
+- Use descriptive names like `speaker: "gen z woman"`
+- Use specific voice IDs from Rime's voice catalog
+
+## Model Selection Guide
+
+- **arcana**: Best for most use cases, highly expressive and natural
+- **mistv2**: Great for multi-language applications
+- **mist**: Legacy model for compatibility
+
+## Advanced Configuration
+
+### Temperature Control
+- `0.0`: Very deterministic, consistent output
+- `0.5`: Balanced (default)
+- `2.0`: More creative and varied
+
+### Top-P Sampling
+- `0.1`: More focused, conservative
+- `0.5`: Balanced (default)
+- `1.0`: More diverse output
+
+### Repetition Penalty
+- `1.0`: No penalty
+- `1.5`: Moderate penalty (default)
+- `2.0`: Strong penalty against repetition
+
+## Error Handling
+
+The provider handles common errors gracefully:
+
+- **Invalid API key**: Throws configuration error
+- **Network issues**: Retries with exponential backoff
+- **Rate limiting**: Respects API rate limits
+- **Streaming errors**: Properly closes connections
+
+## Performance Notes
+
+- Streaming starts in 200-300ms regardless of text length
+- Optimized for real-time applications
+- Supports cancellation of ongoing requests
+- Efficient memory usage with streaming audio chunks
