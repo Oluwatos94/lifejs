@@ -1,14 +1,10 @@
 import type { AgentServer } from "@/agent/server";
 import type {
   EmitFunction,
-  PluginApiDefinition,
   PluginConfig,
-  PluginConfigDefinition,
   PluginContext,
-  PluginContextDefinition,
   PluginDefinition,
   PluginDependencies,
-  PluginDependenciesDefinition,
   PluginEvent,
   PluginEventsDefinition,
   PluginInterceptorFunction,
@@ -22,15 +18,9 @@ import { newId } from "@/shared/prefixed-id";
 import { equal } from "@/shared/stable-equal";
 import type { SerializableValue } from "@/shared/stable-serialize";
 
-type PluginExternalInterceptor<TDefinition extends PluginDefinition = PluginDefinition> = {
-  server: PluginServer<TDefinition>;
-  interceptor: PluginInterceptorFunction<
-    PluginDependenciesDefinition,
-    PluginEventsDefinition,
-    PluginConfigDefinition,
-    PluginContextDefinition,
-    PluginApiDefinition
-  >;
+type PluginExternalInterceptor = {
+  server: PluginServer<PluginDefinition>;
+  interceptor: PluginInterceptorFunction;
 };
 
 // - Server
@@ -44,12 +34,12 @@ export class PluginServer<const Definition extends PluginDefinition> {
     callback: (newValue: SerializableValue, oldValue: SerializableValue) => void;
     lastValue: SerializableValue;
   }>();
-  #externalInterceptors: PluginExternalInterceptor<PluginDefinition>[] = [];
+  #externalInterceptors: PluginExternalInterceptor[] = [];
   #queue: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">> = new AsyncQueue<
     PluginEvent<PluginEventsDefinition, "output">
   >();
   #servicesQueues: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">>[] = [];
-  api: PluginApiBase<Definition["events"], Definition["config"], Definition["context"]>;
+  api: PluginApiBase<Definition>;
 
   constructor(
     agent: AgentServer,
@@ -70,7 +60,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
       config: this.#config,
       context: this.#createReadonlyContext(),
       emit: this.emit.bind(this) as EmitFunction,
-    });
+    }) as PluginApiBase<Definition>;
   }
 
   // Create read-only context with onChange and get
@@ -353,7 +343,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
     }
   }
 
-  registerExternalInterceptor(interceptor: PluginExternalInterceptor<PluginDefinition>) {
+  registerExternalInterceptor(interceptor: PluginExternalInterceptor) {
     this.#externalInterceptors.push(interceptor);
   }
 

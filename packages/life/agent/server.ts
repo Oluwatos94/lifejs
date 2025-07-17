@@ -55,7 +55,7 @@ export class AgentServer {
 
   #validatePlugins() {
     // Validate plugins have unique names
-    const pluginNames = this.definition.plugins.map((plugin) => plugin.name);
+    const pluginNames = Object.values(this.definition.plugins).map((plugin) => plugin.name);
     const duplicates = pluginNames.filter((name, index) => pluginNames.indexOf(name) !== index);
     if (duplicates.length > 0) {
       const uniqueDuplicates = [...new Set(duplicates)];
@@ -65,10 +65,10 @@ export class AgentServer {
     }
 
     // Validate plugin dependencies
-    for (const plugin of this.definition.plugins) {
+    for (const plugin of Object.values(this.definition.plugins)) {
       for (const [depName, depDef] of Object.entries(plugin.dependencies || {})) {
         // - Ensure the plugin is provided
-        const depPlugin = this.definition.plugins.find((p) => p.name === depName);
+        const depPlugin = Object.values(this.definition.plugins).find((p) => p.name === depName);
         if (!depPlugin) {
           throw new Error(
             `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this.definition.name}')`,
@@ -135,14 +135,14 @@ export class AgentServer {
 
   async start() {
     // - Create plugin servers
-    for (const plugin of this.definition.plugins) {
+    for (const plugin of Object.values(this.definition.plugins)) {
       const config = plugin.config.parse(this.definition.pluginConfigs[plugin.name] ?? {});
       this.plugins[plugin.name] = new PluginServer(this, plugin, config);
     }
 
     // - Prepare all plugins (this sets up services, interceptors, etc.)
     // biome-ignore lint/style/noNonNullAssertion: defined above, so exists
-    for (const plugin of this.definition.plugins) this.plugins[plugin.name]!.init();
+    for (const plugin of Object.values(this.definition.plugins)) this.plugins[plugin.name]!.init();
 
     // Start all plugin servers
     await Promise.all(Object.values(this.plugins).map((p) => p.start()));

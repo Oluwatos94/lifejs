@@ -67,8 +67,6 @@
     "**/CONTRIBUTING.md": false,
     "**/packages/releases": false
   },
-  "tailwindCSS.experimental.classRegex": [
-    ["([\"'`][^\"'`]*.*?[\"'`])", "[\"'`]([^\"'`]*).*?[\"'`]"]
-  ],
+
   "tailwindCSS.classAttributes": ["class", "className", ".*Class(es)?"]
 }

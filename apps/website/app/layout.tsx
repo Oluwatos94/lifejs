@@ -46,7 +46,7 @@ const gloriaHallelujah = Gloria_Hallelujah({
 
 const name = "Life.js";
 const description =
-  "Life.js is the first-ever fullstack framework to build agentic web applications. It is minimal, extensible, and typesafe. Well, everything you love.";
+  "Life.js is the first fullstack framework to build agentic web applications. It is minimal, extensible, and typesafe. Well, everything you love.";
 const url = "https://lifejs.org";
 
 export const viewport = {

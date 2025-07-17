@@ -15,7 +15,7 @@
 
 <div align="center">
 
-[Life.js](https://lifejs.org) is an open-source framework to build *agentic apps*, i.e., apps that can adapt to the user, perceive, and even act autonomously alongside them, while being interacted with via voice, text, or touch.
+[Life.js](https://lifejs.org) is the first open-source framework to build *agentic apps*, i.e., apps that can adapt to the user, perceive, and even act autonomously alongside them, while being interacted with via voice, text, or touch.
 
 It is minimal, extensible, and typesafe. Well, everything you love.
 </div>

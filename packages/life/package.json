@@ -1,7 +1,7 @@
 {
   "name": "life",
   "version": "0.10.0",
-  "description": "Life.js is the first-ever fullstack framework to build agentic web applications. It is minimal, extensible, and typesafe. Well, everything you love.",
+  "description": "Life.js is the first fullstack framework to build agentic web applications. It is minimal, extensible, and typesafe. Well, everything you love.",
   "author": "Lila Rest",
   "license": "MIT+Services",
   "homepage": "https://lifejs.org",

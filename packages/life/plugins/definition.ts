@@ -16,28 +16,19 @@ export type EmitFunction<EventsDef extends PluginEventsDefinition = PluginEvents
 ) => string;
 
 // - Dependencies
-export type PluginDependencyDefinition = {
-  events: PluginEventsDefinition;
-  config?: PluginConfigDefinition;
-  context?: PluginContextDefinition;
-  api?: PluginApiDefinition;
-};
+export type PluginDependencyDefinition = Pick<
+  PluginDefinition,
+  "name" | "events" | "config" | "context" | "api"
+>;
 export type PluginDependenciesDefinition = Record<string, PluginDependencyDefinition>;
 export type PluginDependencies<Defs extends PluginDependenciesDefinition> = {
   [K in keyof Defs]: {
+    name: Defs[K]["name"];
     events: Defs[K]["events"];
-    config: Defs[K]["config"] extends PluginConfigDefinition
-      ? PluginConfig<Defs[K]["config"], "output">
-      : Readonly<Record<string, never>>;
-    context: Defs[K]["context"] extends PluginContextDefinition
-      ? ReadonlyPluginContext<PluginContext<Defs[K]["context"], "output">>
-      : ReadonlyPluginContext<Record<string, never>>;
-    api: Defs[K]["api"] extends PluginApiDefinition
-      ? PluginApi<Defs[K]["api"]>
-      : Readonly<Record<string, never>>;
-    emit: EmitFunction<
-      Defs[K]["events"] extends PluginEventsDefinition ? Defs[K]["events"] : Record<string, never>
-    >;
+    config: Defs[K]["config"];
+    context: Defs[K]["context"];
+    api: Defs[K]["api"];
+    emit: EmitFunction<Defs[K]["events"]>;
   };
 };
 
@@ -98,165 +89,123 @@ export type PluginEvent<EventsDef extends PluginEventsDefinition, T extends "inp
 // - API
 export interface PluginApiDefinition<
   Schema extends z.AnyZodObject = z.AnyZodObject,
-  EventsDef extends PluginEventsDefinition = PluginEventsDefinition,
-  ConfigDef extends PluginConfigDefinition = PluginConfigDefinition,
-  ContextDef extends PluginContextDefinition = PluginContextDefinition,
+  Definition extends PluginDefinition = PluginDefinition,
 > {
   schema: Schema;
   implementation: (
-    Base: typeof PluginApiBase<EventsDef, ConfigDef, ContextDef>,
+    Base: typeof PluginApiBase<Definition>,
     schema: Schema,
   ) => new (
-    raw: PluginApiConnector<EventsDef, ConfigDef, ContextDef>,
-  ) => PluginApiBase<EventsDef, ConfigDef, ContextDef> & z.TypeOf<Schema>;
+    raw: PluginApiConnector<Definition>,
+  ) => PluginApiBase<Definition> & z.TypeOf<Schema>;
 }
 
 export type PluginApi<Def extends PluginApiDefinition> = z.TypeOf<Def["schema"]>;
 
-export type PluginApiConnector<
-  EventsDef extends PluginEventsDefinition,
-  ConfigDef extends PluginConfigDefinition,
-  ContextDef extends PluginContextDefinition,
-> = {
-  context: ReadonlyPluginContext<PluginContext<ContextDef, "output">>;
-  config: PluginConfig<ConfigDef, "output">;
-  emit: EmitFunction<EventsDef>;
+export type PluginApiConnector<Definition extends PluginDefinition> = {
+  context: ReadonlyPluginContext<PluginContext<Definition["context"], "output">>;
+  config: PluginConfig<Definition["config"], "output">;
+  emit: EmitFunction<Definition["events"]>;
 };
 
-export class PluginApiBase<
-  EventsDef extends PluginEventsDefinition = PluginEventsDefinition,
-  ConfigDef extends PluginConfigDefinition = PluginConfigDefinition,
-  ContextDef extends PluginContextDefinition = PluginContextDefinition,
-> {
-  raw: PluginApiConnector<EventsDef, ConfigDef, ContextDef>;
-  constructor(raw: PluginApiConnector<EventsDef, ConfigDef, ContextDef>) {
+export class PluginApiBase<Definition extends PluginDefinition = PluginDefinition> {
+  raw: PluginApiConnector<Definition>;
+  constructor(raw: PluginApiConnector<Definition>) {
     this.raw = raw;
   }
 }
 
 // - Lifecycle
-export type PluginLifecycle<
-  ConfigDef extends PluginConfigDefinition,
-  ContextDef extends PluginContextDefinition,
-  EventsDef extends PluginEventsDefinition = PluginEventsDefinition,
-> = {
+export type PluginLifecycle<Definition extends PluginDefinition = PluginDefinition> = {
   onStart?: (params: {
-    config: PluginConfig<ConfigDef, "output">;
-    context: WritablePluginContext<PluginContext<ContextDef, "output">>;
-    emit: EmitFunction<EventsDef>;
+    config: PluginConfig<Definition["config"], "output">;
+    context: WritablePluginContext<PluginContext<Definition["context"], "output">>;
+    emit: EmitFunction<Definition["events"]>;
   }) => void | Promise<void>;
   onStop?: (params: {
-    config: PluginConfig<ConfigDef, "output">;
-    context: WritablePluginContext<PluginContext<ContextDef, "output">>;
-    emit: EmitFunction<EventsDef>;
+    config: PluginConfig<Definition["config"], "output">;
+    context: WritablePluginContext<PluginContext<Definition["context"], "output">>;
+    emit: EmitFunction<Definition["events"]>;
   }) => void | Promise<void>;
   onError?: (params: {
-    config: PluginConfig<ConfigDef, "output">;
-    context: WritablePluginContext<PluginContext<ContextDef, "output">>;
-    emit: EmitFunction<EventsDef>;
+    config: PluginConfig<Definition["config"], "output">;
+    context: WritablePluginContext<PluginContext<Definition["context"], "output">>;
+    emit: EmitFunction<Definition["events"]>;
     error: unknown;
   }) => void | Promise<void>;
 };
 
 // - Effects
-export type PluginEffectFunction<
-  DependenciesDef extends PluginDependenciesDefinition,
-  EventsDef extends PluginEventsDefinition,
-  ConfigDef extends PluginConfigDefinition,
-  ContextDef extends PluginContextDefinition,
-  ApiDef extends PluginApiDefinition,
-> = (params: {
-  event: PluginEvent<EventsDef, "output">;
-  agent: AgentServer;
-  config: PluginConfig<ConfigDef, "output">;
-  context: WritablePluginContext<PluginContext<ContextDef, "output">>;
-  api: PluginApi<ApiDef>;
-  dependencies: PluginDependencies<DependenciesDef>;
-  emit: EmitFunction<EventsDef>;
-}) => void | Promise<void>;
+export type PluginEffectFunction<Definition extends PluginDefinition = PluginDefinition> =
+  (params: {
+    event: PluginEvent<Definition["events"], "output">;
+    agent: AgentServer;
+    config: PluginConfig<Definition["config"], "output">;
+    context: WritablePluginContext<PluginContext<Definition["context"], "output">>;
+    api: PluginApi<Definition["api"]>;
+    dependencies: PluginDependencies<Definition["dependencies"]>;
+    emit: EmitFunction<Definition["events"]>;
+  }) => void | Promise<void>;
+export type PluginEffectsDefinition<Definition extends PluginDefinition = PluginDefinition> =
+  Record<string, PluginEffectFunction<Definition>>;
 
 // - Services
-export type PluginServiceFunction<
-  DependenciesDef extends PluginDependenciesDefinition,
-  EventsDef extends PluginEventsDefinition,
-  ConfigDef extends PluginConfigDefinition,
-  ContextDef extends PluginContextDefinition,
-  ApiDef extends PluginApiDefinition,
-> = (params: {
-  queue: AsyncQueue<PluginEvent<EventsDef, "output">>;
-  agent: AgentServer;
-  config: PluginConfig<ConfigDef, "output">;
-  context: ReadonlyPluginContext<PluginContext<ContextDef, "output">>;
-  api: PluginApi<ApiDef>;
-  dependencies: PluginDependencies<DependenciesDef>;
-  emit: EmitFunction<EventsDef>;
-}) => void | Promise<void>;
+export type PluginServiceFunction<Definition extends PluginDefinition = PluginDefinition> =
+  (params: {
+    queue: AsyncQueue<PluginEvent<Definition["events"], "output">>;
+    agent: AgentServer;
+    config: PluginConfig<Definition["config"], "output">;
+    context: ReadonlyPluginContext<PluginContext<Definition["context"], "output">>;
+    api: PluginApi<Definition["api"]>;
+    dependencies: PluginDependencies<Definition["dependencies"]>;
+    emit: EmitFunction<Definition["events"]>;
+  }) => void | Promise<void>;
+export type PluginServicesDefinition<Definition extends PluginDefinition = PluginDefinition> =
+  Record<string, PluginServiceFunction<Definition>>;
 
 // - Interceptors
-export type PluginInterceptorFunction<
-  DependenciesDef extends PluginDependenciesDefinition,
-  EventsDef extends PluginEventsDefinition,
-  ConfigDef extends PluginConfigDefinition,
-  ContextDef extends PluginContextDefinition,
-  ApiDef extends PluginApiDefinition,
-> = (params: {
-  event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">;
-  next: (event: PluginEvent<DependenciesDef[keyof DependenciesDef]["events"], "output">) => void;
-  drop: (reason: string) => void;
-  dependency: PluginDependencies<DependenciesDef>[keyof DependenciesDef] & {
-    name: keyof DependenciesDef;
-  };
-  current: {
-    emit: EmitFunction<EventsDef>;
-    context: ReadonlyPluginContext<PluginContext<ContextDef, "output">>;
-    api: PluginApi<ApiDef>;
-    config: PluginConfig<ConfigDef, "output">;
-  };
-}) => void | Promise<void>;
+export type PluginInterceptorFunction<Definition extends PluginDefinition = PluginDefinition> =
+  (params: {
+    event: PluginEvent<
+      PluginDependencies<Definition["dependencies"]>[keyof PluginDependencies<
+        Definition["dependencies"]
+      >]["events"],
+      "output"
+    >;
+    next: (
+      event: PluginEvent<
+        PluginDependencies<Definition["dependencies"]>[keyof PluginDependencies<
+          Definition["dependencies"]
+        >]["events"],
+        "output"
+      >,
+    ) => void;
+    drop: (reason: string) => void;
+    dependency: PluginDependencies<Definition["dependencies"]>[keyof Definition["dependencies"]] & {
+      name: keyof Definition["dependencies"];
+    };
+    current: {
+      emit: EmitFunction<Definition["events"]>;
+      context: ReadonlyPluginContext<PluginContext<Definition["context"], "output">>;
+      api: PluginApi<Definition["api"]>;
+      config: PluginConfig<Definition["config"], "output">;
+    };
+  }) => void | Promise<void>;
+export type PluginInterceptorsDefinition<Definition extends PluginDefinition = PluginDefinition> =
+  Record<string, PluginInterceptorFunction<Definition>>;
 
 // - Definition
 export interface PluginDefinition {
-  readonly name: string;
+  name: string;
   dependencies: PluginDependenciesDefinition;
   config: PluginConfigDefinition;
   context: PluginContextDefinition;
   events: PluginEventsDefinition;
   api: PluginApiDefinition;
-  lifecycle: PluginLifecycle<
-    PluginConfigDefinition,
-    PluginContextDefinition,
-    PluginEventsDefinition
-  >;
-  effects: Record<
-    string,
-    PluginEffectFunction<
-      PluginDependenciesDefinition,
-      PluginEventsDefinition,
-      PluginConfigDefinition,
-      PluginContextDefinition,
-      PluginApiDefinition
-    >
-  >;
-  services: Record<
-    string,
-    PluginServiceFunction<
-      PluginDependenciesDefinition,
-      PluginEventsDefinition,
-      PluginConfigDefinition,
-      PluginContextDefinition,
-      PluginApiDefinition
-    >
-  >;
-  interceptors: Record<
-    string,
-    PluginInterceptorFunction<
-      PluginDependenciesDefinition,
-      PluginEventsDefinition,
-      PluginConfigDefinition,
-      PluginContextDefinition,
-      PluginApiDefinition
-    >
-  >;
+  lifecycle: PluginLifecycle;
+  effects: PluginEffectsDefinition;
+  services: PluginServicesDefinition;
+  interceptors: PluginInterceptorsDefinition;
 }
 
 // - Plugin
@@ -276,22 +225,12 @@ export class PluginDefinitionBuilder<
   dependencies<const Plugins extends { _definition: PluginDefinition }[]>(plugins: Plugins) {
     // Convert array of plugin builders to dependencies definition
     const dependencies: PluginDependenciesDefinition = {};
-
-    for (const plugin of plugins) {
-      const def = plugin._definition;
-      const name = def.name;
-
-      dependencies[name] = {
-        events: def.events || {},
-        config: def.config,
-        context: def.context || {},
-        api: def.api,
-      };
-    }
+    for (const plugin of plugins) dependencies[plugin._definition.name] = plugin._definition;
 
     // Type to extract dependency definition from array of plugins
     type ExtractedDependencies = {
       [K in Plugins[number] as K["_definition"]["name"]]: {
+        name: K["_definition"]["name"];
         events: K["_definition"]["events"];
         config: K["_definition"]["config"];
         context: K["_definition"]["context"];
@@ -302,7 +241,7 @@ export class PluginDefinitionBuilder<
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       dependencies,
-    }) as PluginDefinitionBuilder<
+    }) as unknown as PluginDefinitionBuilder<
       Definition & { dependencies: ExtractedDependencies },
       EffectKeys,
       ServiceKeys,
@@ -354,18 +293,11 @@ export class PluginDefinitionBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods | "events">;
   }
 
-  api<const Schema extends z.AnyZodObject>(
-    api: PluginApiDefinition<
-      Schema,
-      Definition["events"],
-      Definition["config"],
-      Definition["context"]
-    >,
-  ) {
+  api<const Schema extends z.AnyZodObject>(api: PluginApiDefinition<Schema, Definition>) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       api,
-    }) as PluginDefinitionBuilder<
+    }) as unknown as PluginDefinitionBuilder<
       Definition & { api: PluginApiDefinition<Schema> },
       EffectKeys,
       ServiceKeys,
@@ -375,17 +307,11 @@ export class PluginDefinitionBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods | "api">;
   }
 
-  lifecycle<
-    const LifecycleConfig extends PluginLifecycle<
-      Definition["config"],
-      Definition["context"],
-      Definition["events"]
-    >,
-  >(lifecycle: LifecycleConfig) {
+  lifecycle<const LifecycleConfig extends PluginLifecycle<Definition>>(lifecycle: LifecycleConfig) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       lifecycle,
-    }) as PluginDefinitionBuilder<
+    }) as unknown as PluginDefinitionBuilder<
       Definition,
       EffectKeys,
       ServiceKeys,
@@ -395,16 +321,7 @@ export class PluginDefinitionBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods | "lifecycle">;
   }
 
-  addEffect<const Name extends string>(
-    name: Name,
-    effect: PluginEffectFunction<
-      Definition["dependencies"],
-      Definition["events"],
-      Definition["config"],
-      Definition["context"],
-      Definition["api"]
-    >,
-  ) {
+  addEffect<const Name extends string>(name: Name, effect: PluginEffectFunction<Definition>) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       effects: { ...(this._definition.effects ?? {}), [name]: effect },
@@ -423,7 +340,7 @@ export class PluginDefinitionBuilder<
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       effects: remainingEffects,
-    }) as PluginDefinitionBuilder<
+    }) as unknown as PluginDefinitionBuilder<
       Definition,
       Exclude<EffectKeys, Name>,
       ServiceKeys,
@@ -433,16 +350,7 @@ export class PluginDefinitionBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods>;
   }
 
-  addService<const Name extends string>(
-    name: Name,
-    service: PluginServiceFunction<
-      Definition["dependencies"],
-      Definition["events"],
-      Definition["config"],
-      Definition["context"],
-      Definition["api"]
-    >,
-  ) {
+  addService<const Name extends string>(name: Name, service: PluginServiceFunction<Definition>) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       services: { ...(this._definition.services ?? {}), [name]: service },
@@ -461,7 +369,7 @@ export class PluginDefinitionBuilder<
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       services: remainingServices,
-    }) as PluginDefinitionBuilder<
+    }) as unknown as PluginDefinitionBuilder<
       Definition,
       EffectKeys,
       Exclude<ServiceKeys, Name>,
@@ -473,13 +381,7 @@ export class PluginDefinitionBuilder<
 
   addInterceptor<const Name extends string>(
     name: Name,
-    interceptor: PluginInterceptorFunction<
-      Definition["dependencies"],
-      Definition["events"],
-      Definition["config"],
-      Definition["context"],
-      Definition["api"]
-    >,
+    interceptor: PluginInterceptorFunction<Definition>,
   ) {
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
@@ -499,7 +401,7 @@ export class PluginDefinitionBuilder<
     const plugin = new PluginDefinitionBuilder({
       ...this._definition,
       interceptors: remainingInterceptors,
-    }) as PluginDefinitionBuilder<
+    }) as unknown as PluginDefinitionBuilder<
       Definition,
       EffectKeys,
       ServiceKeys,
@@ -516,16 +418,14 @@ export class PluginDefinitionBuilder<
       context?: Array<keyof Definition["context"]["schema"]["shape"]>;
       config?: boolean;
     },
-  >(options: Options) {
+  >(_options: Options) {
     // Pick is now type-only - runtime always returns the full plugin
     // TypeScript will enforce the constraints at compile time
-    options; // Mark as used
     const pickedDefinition: PluginDefinition = this._definition;
 
     // Type for the picked definition
     type PickedDefinition = {
       name: Definition["name"];
-      dependencies: Definition["dependencies"];
       config: Options["config"] extends true ? Definition["config"] : never;
       events: Options["events"] extends readonly string[]
         ? Pick<Definition["events"], Options["events"][number]>
@@ -542,10 +442,11 @@ export class PluginDefinitionBuilder<
             schema: z.ZodObject<Pick<Definition["api"]["schema"]["shape"], Options["api"][number]>>;
           }
         : never;
-      lifecycle: Definition["lifecycle"];
-      effects: Definition["effects"];
-      services: Definition["services"];
-      interceptors: Definition["interceptors"];
+      dependencies: never;
+      lifecycle: never;
+      effects: never;
+      services: never;
+      interceptors: never;
     };
 
     return new PluginDefinitionBuilder(pickedDefinition) as unknown as PluginDefinitionBuilder<

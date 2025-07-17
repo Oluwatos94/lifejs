@@ -22,6 +22,7 @@ export const memoriesPlugin = definePlugin("memories")
       context: ["messages"],
     }),
   ])
+
   .config(
     z.object({
       items: z.array(z.custom<{ _definition: MemoryDefinition }>()).default([]),
@@ -108,7 +109,6 @@ export const memoriesPlugin = definePlugin("memories")
       }
     }
   })
-
   // Build memories messages and emit build response
   .addService("build-memories", async ({ config, emit, queue, context }) => {
     for await (const event of queue) {

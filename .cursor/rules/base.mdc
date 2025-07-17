@@ -4,7 +4,7 @@ This file provides guidance to Cursor when working with code in this repository.
 
 
 ## Project
-*Life.js is an open-source framework to build agentic apps, i.e., apps that can adapt to the users, perceive, and even act autonomously alongside them, while being interacted with via voice, text, or touch.*
+*Life.js is the first open-source framework to build agentic apps, i.e., apps that can adapt to the users, perceive, and even act autonomously alongside them, while being interacted with via voice, text, or touch.*
 
 It is notably built on an actor plugin model, where all the parts of the frameworks (core, memories, actions, etc.) are actually individual plugins, with their own local responsibilities, providing their own set of features. This model enforces locality, maintainability and flexibility (developers can swap or add plugin). For example, the core itself is a plugin, responsible for receiving incoming audio/text stream from the WebRTC room, and chaining AI models to stream back a textual or vocal answer back to the WebRTC room.
 

@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project
-*Life.js is an open-source framework to build agentic apps, i.e., apps that can adapt to the users, perceive, and even act autonomously alongside them, while being interacted with via voice, text, or touch.*
+*Life.js is the first open-source framework to build agentic apps, i.e., apps that can adapt to the users, perceive, and even act autonomously alongside them, while being interacted with via voice, text, or touch.*
 
 It is notably built on an actor plugin model, where all the parts of the frameworks (core, memories, actions, etc.) are actually individual plugins, with their own local responsibilities, providing their own set of features. This model enforces locality, maintainability and flexibility (developers can swap or add plugin). For example, the core itself is a plugin, responsible for receiving incoming audio/text stream from the WebRTC room, and chaining AI models to stream back a textual or vocal answer back to the WebRTC room.
 
@@ -53,29 +53,4 @@ Here is an overview of its sub-folders:
 - **Testing**: For now we simply using `bun test` (bundled with Bun) which is automatically picking and running `*.test.ts` files in the project.
 
 ## Development Guidelines
-
-### Code Style
-- TypeScript for all code, avoid @ts-ignore and `any` whenever possible
-- Make sure changes / additions are consistent with the existing code around it
-- Be surgical, minimal and precise in your changes
-- Never drop any existing feature or behavior because it is incompatible with some changes you performed. If adapting that part is heavy and you're unsure, ask the user, else adapt the now incompatible part.
-- Use interfaces over types whenever possible
-- Avoid enums, use const maps
-- Prefer functional and declarative patterns
-- Use early returns for readability
-- Named exports for components
-- Descriptive naming with auxiliary verbs (isLoading, hasError)
-- Event handlers prefixed with "handle" or "process"
-
-### File Organization
-- Components: exports, subcomponents, helpers, types
-- Directories: lowercase with dashes (auth-wizard)
-- Minimal external dependencies
-
-### Test your changes
-Before concluding that a performed change is working, write a minimal temporary test file to test that your changes are working as expected.
-
-### Answers Tips
-- Keep your answer minimal and dense, still easy to read quickly
-- Be as transparent as possible with the user, always explain shortly your reasoning
-- Consider introducing a TL;DR at the top or bottom of complex explanations
+- Use thinking at every step, reason about your changes and ideas ( think ).

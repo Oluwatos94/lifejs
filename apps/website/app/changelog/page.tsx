@@ -6,7 +6,7 @@ import Image from "next/image";
 export const metadata: Metadata = {
   title: "Changelog",
   description:
-    "Track the latest Life.js version updates. Life.js is the first-ever fullstack framework to build agentic web applications. It is minimal, extensible, and typesafe. Well, everything you love.",
+    "Track the latest Life.js version updates. Life.js is the first fullstack framework to build agentic web applications. It is minimal, extensible, and typesafe. Well, everything you love.",
 };
 
 interface Change {
