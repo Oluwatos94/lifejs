@@ -1,5 +1,17 @@
 # life
 
+## 0.11.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [88aa90e](https://github.com/lifejs/lifejs/commit/88aa90edf139cdfbceaaebaad25eecb9d8f2dbea) — The plugin.context() API has been improved with initial values
+- [@LilaRest](https://github.com/LilaRest) in [88aa90e](https://github.com/lifejs/lifejs/commit/88aa90edf139cdfbceaaebaad25eecb9d8f2dbea) — The plugin.methods() API has been replaced by plugin.api() making it more flexible and runtime agnostic
+- [@LilaRest](https://github.com/LilaRest) in [6c96aa3](https://github.com/lifejs/lifejs/commit/6c96aa3571e209da506bf06e377fef733b9024fb) — New defineStore() definition builder
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [61437de](https://github.com/lifejs/lifejs/commit/61437de528787a59e9be66a1b224c355b14abcb4) — Exclude memories builder methods as they are called
+
 ## 0.10.0
 
 ### Minor Changes
