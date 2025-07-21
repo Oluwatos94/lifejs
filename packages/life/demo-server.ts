@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { Agent } from "./agent/agent";
 import { History } from "./agent/history";
+import { AgentServer } from "./agent/server";
 import { defaults, defineAgent, defineMemory } from "./exports/define";
 import { getToken } from "./transport/auth";
 
@@ -36,7 +36,7 @@ async function main() {
     });
 
   // Instantiate the agent
-  const agent = new Agent(builder._definition);
+  const agent = new AgentServer(builder._definition);
 
   // Handle graceful shutdown
   let isShuttingDown = false;

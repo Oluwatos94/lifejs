@@ -149,8 +149,8 @@ export const corePlugin = definePlugin("core")
     "agent.thinking-start": {}, // start of generation
     "agent.thinking-end": {}, // end of generation
   })
-  .context(
-    z.object({
+  .context({
+    schema: z.object({
       messages: z.array(messageSchema).default([]),
       status: z
         .object({
@@ -161,23 +161,22 @@ export const corePlugin = definePlugin("core")
         .default({}),
       voiceEnabled: z.boolean().default(true),
     }),
-  )
-  .methods({
-    getMessages: {
-      schema: z.function().returns(z.array(messageSchema)),
-      run: ({ context }) => context.get().messages,
+    initial: {
+      messages: [],
+      status: {
+        listening: true,
+        thinking: false,
+        speaking: false,
+      },
+      voiceEnabled: true,
     },
-
-    createMessage: {
-      schema: z.function().args(createMessageInputSchema).returns(z.string()),
-      run: ({ emit }, message) => emit({ type: "messages.create", data: message, urgent: true }),
-    },
-    updateMessage: {
-      schema: z.function().args(updateMessageInputSchema).returns(z.string()),
-      run: ({ emit }, message) => emit({ type: "messages.update", data: message, urgent: true }),
-    },
-    continue: {
-      schema: z
+  })
+  .api({
+    schema: z.object({
+      getMessages: z.function().returns(z.array(messageSchema)),
+      createMessage: z.function().args(createMessageInputSchema).returns(z.string()),
+      updateMessage: z.function().args(updateMessageInputSchema).returns(z.string()),
+      continue: z
         .function()
         .args(
           z.object({
@@ -186,10 +185,7 @@ export const corePlugin = definePlugin("core")
           }),
         )
         .returns(z.string()),
-      run: ({ emit }, params) => emit({ type: "agent.continue", data: params, urgent: true }),
-    },
-    decide: {
-      schema: z
+      decide: z
         .function()
         .args(
           z.object({
@@ -199,10 +195,7 @@ export const corePlugin = definePlugin("core")
           }),
         )
         .returns(z.string()),
-      run: ({ emit }, params) => emit({ type: "agent.decide", data: params, urgent: true }),
-    },
-    say: {
-      schema: z
+      say: z
         .function()
         .args(
           z.object({
@@ -212,10 +205,7 @@ export const corePlugin = definePlugin("core")
           }),
         )
         .returns(z.string()),
-      run: ({ emit }, params) => emit({ type: "agent.say", data: params, urgent: true }),
-    },
-    interrupt: {
-      schema: z
+      interrupt: z
         .function()
         .args(
           z.object({
@@ -225,7 +215,43 @@ export const corePlugin = definePlugin("core")
           }),
         )
         .returns(z.string()),
-      run: ({ emit }, params) => emit({ type: "agent.interrupt", data: params, urgent: true }),
+    }),
+    implementation: (Base, _schema) => {
+      type Schema = z.infer<typeof _schema>;
+      return class extends Base {
+        getMessages: Schema["getMessages"] = () => {
+          return this.raw.context.get().messages;
+        };
+        createMessage: Schema["createMessage"] = (message) => {
+          return this.raw.emit({ type: "messages.create", data: message, urgent: true });
+        };
+        updateMessage(message: z.infer<typeof updateMessageInputSchema>) {
+          return this.raw.emit({ type: "messages.update", data: message, urgent: true });
+        }
+        continue(params: {
+          interrupt?: "abrupt" | "smooth" | false;
+          preventInterruption?: boolean;
+        }) {
+          return this.raw.emit({ type: "agent.continue", data: params, urgent: true });
+        }
+        decide(params: {
+          messages: z.infer<typeof messageSchema>[];
+          interrupt?: "abrupt" | "smooth" | false;
+          preventInterruption?: boolean;
+        }) {
+          return this.raw.emit({ type: "agent.decide", data: params, urgent: true });
+        }
+        say(params: {
+          text: string;
+          interrupt?: "abrupt" | "smooth" | false;
+          preventInterruption?: boolean;
+        }) {
+          return this.raw.emit({ type: "agent.say", data: params, urgent: true });
+        }
+        interrupt(params: { reason: string; author: "user" | "application"; force?: boolean }) {
+          return this.raw.emit({ type: "agent.interrupt", data: params, urgent: true });
+        }
+      };
     },
   })
   .lifecycle({
@@ -337,7 +363,7 @@ export const corePlugin = definePlugin("core")
     return new Promise((resolve) => process.once("SIGINT", () => resolve()));
   })
   // 4. Use VAD model to detect voice activity
-  .addService("detect-voice", async ({ queue, agent, emit, methods, config, context }) => {
+  .addService("detect-voice", async ({ queue, agent, emit, config, context }) => {
     const SCORE_IN_THRESHOLD = config.voiceDetection.scoreInThreshold;
     const SCORE_OUT_THRESHOLD = config.voiceDetection.scoreOutThreshold;
     const PRE_PADDING_CHUNKS = config.voiceDetection.prePaddingChunks;
@@ -444,7 +470,11 @@ export const corePlugin = definePlugin("core")
 
         // If the interruption duration is long enough, abort and emit all accumulated voice chunks
         if (getCurrentInterruptDuration() >= INTERRUPT_MIN_DURATION_MS) {
-          methods.interrupt({ reason: "The user is speaking", author: "user" });
+          emit({
+            type: "agent.interrupt",
+            data: { reason: "The user is speaking", author: "user" },
+            urgent: true,
+          });
           emit({ type: "user.voice-start" });
           for (const voiceChunk of interruptBuffer.get()) {
             emitVoiceChunk({ voiceChunk, type: "voice" });
@@ -475,7 +505,7 @@ export const corePlugin = definePlugin("core")
     }
   })
   // 6. Use EOU model to detect user's end of turn
-  .addService("detect-end-of-turn", async ({ queue, agent, methods, config, context }) => {
+  .addService("detect-end-of-turn", async ({ queue, agent, emit, config, context }) => {
     const END_OF_TURN_THRESHOLD = config.endOfTurnDetection.threshold;
     const MAX_TIMEOUT_MS = config.endOfTurnDetection.maxTimeoutMs;
     const MIN_TIMEOUT_MS = config.endOfTurnDetection.minTimeoutMs;
@@ -493,7 +523,7 @@ export const corePlugin = definePlugin("core")
     const answer = () => {
       if (timeoutId) clearTimeout(timeoutId);
       if (!canAnswer()) return;
-      methods.continue({ interrupt: "abrupt" });
+      emit({ type: "agent.continue", data: { interrupt: "abrupt" }, urgent: true });
       lastMessageBuffer = "";
     };
 
@@ -544,7 +574,7 @@ export const corePlugin = definePlugin("core")
     });
   })
   // 9. Handle tools executions
-  .addEffect("handle-tools", async ({ event, emit, config, methods }) => {
+  .addEffect("handle-tools", async ({ event, emit, config, api }) => {
     if (event.type !== "agent.tool-requests") return;
 
     await Promise.all(
@@ -579,7 +609,7 @@ export const corePlugin = definePlugin("core")
           });
         }
 
-        methods.continue({ interrupt: "abrupt" });
+        api.continue({ interrupt: "abrupt" });
       }),
     );
   })

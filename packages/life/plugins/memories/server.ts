@@ -2,7 +2,7 @@ import { z } from "zod";
 import { type Message, messageSchema } from "@/agent/resources";
 import { definePlugin } from "@/plugins/definition";
 import { sha256 } from "@/shared/stable-sha256";
-import { corePlugin } from "../core/core";
+import { corePlugin } from "../core/server";
 import type { MemoryDefinition } from "./definition";
 
 // Helper function to build a memory and get its output messages
@@ -20,9 +20,9 @@ export const memoriesPlugin = definePlugin("memories")
     corePlugin.pick({
       events: ["agent.resources-response", "messages.changed"],
       context: ["messages"],
-      config: true,
     }),
   ])
+
   .config(
     z.object({
       items: z.array(z.custom<{ _definition: MemoryDefinition }>()).default([]),
@@ -52,16 +52,20 @@ export const memoriesPlugin = definePlugin("memories")
       }),
     },
   })
-  .context(
-    z.object({
-      memoriesLastResults: z.custom<Map<string, Message[]>>().default(new Map()),
-      memoriesLastTimestamp: z.custom<Map<string, number>>().default(new Map()),
-      processedRequestsIds: z.custom<Set<string>>().default(new Set()),
-      computedMemoriesCache: z
-        .custom<Map<string, { hash: string; memories: Message[] }>>()
-        .default(new Map()),
+  .context({
+    schema: z.object({
+      memoriesLastResults: z.custom<Map<string, Message[]>>(),
+      memoriesLastTimestamp: z.custom<Map<string, number>>(),
+      processedRequestsIds: z.custom<Set<string>>(),
+      computedMemoriesCache: z.custom<Map<string, { hash: string; memories: Message[] }>>(),
     }),
-  )
+    initial: {
+      memoriesLastResults: new Map(),
+      memoriesLastTimestamp: new Map(),
+      processedRequestsIds: new Set<string>(),
+      computedMemoriesCache: new Map(),
+    },
+  })
   // Intercept the 'agent.resources-response' from core plugin to emit blocking build-request
   .addInterceptor("intercept-core-resources-response", ({ event, drop, dependency, current }) => {
     if (dependency.name !== "core" || event.type !== "agent.resources-response") return;
@@ -105,7 +109,6 @@ export const memoriesPlugin = definePlugin("memories")
       }
     }
   })
-
   // Build memories messages and emit build response
   .addService("build-memories", async ({ config, emit, queue, context }) => {
     for await (const event of queue) {
@@ -220,9 +223,6 @@ export const memoriesPlugin = definePlugin("memories")
       return newSet;
     });
     // Re-emit the resources response event
-    dependencies.core.context.get().messages;
-    dependencies.core.config.tools;
-
     dependencies.core.emit({
       type: "agent.resources-response",
       data: event.data,

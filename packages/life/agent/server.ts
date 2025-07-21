@@ -1,3 +1,4 @@
+import type z from "zod";
 import { isSameType } from "zod-compare";
 import { type EOUProvider, eouProviders } from "@/models/eou";
 import { type LLMProvider, llmProviders } from "@/models/llm";
@@ -5,12 +6,12 @@ import { type STTProvider, sttProviders } from "@/models/stt";
 import { type TTSProvider, ttsProviders } from "@/models/tts";
 import { type VADProvider, vadProviders } from "@/models/vad";
 import type { PluginDefinition } from "@/plugins/definition";
-import { PluginRunner } from "@/plugins/runner";
+import { PluginServer } from "@/plugins/server";
 import { newId } from "@/shared/prefixed-id";
 import { TransportServer } from "@/transport/server";
 import type { AgentDefinition } from "./definition";
 
-export class Agent {
+export class AgentServer {
   id = newId("agent");
   definition: AgentDefinition;
   transport: TransportServer;
@@ -22,7 +23,7 @@ export class Agent {
     llm: InstanceType<LLMProvider>;
     tts: InstanceType<TTSProvider>;
   };
-  plugins: Record<string, PluginRunner<PluginDefinition>> = {};
+  plugins: Record<string, PluginServer<PluginDefinition>> = {};
 
   constructor(definition: AgentDefinition) {
     this.definition = definition;
@@ -54,7 +55,7 @@ export class Agent {
 
   #validatePlugins() {
     // Validate plugins have unique names
-    const pluginNames = this.definition.plugins.map((plugin) => plugin.name);
+    const pluginNames = Object.values(this.definition.plugins).map((plugin) => plugin.name);
     const duplicates = pluginNames.filter((name, index) => pluginNames.indexOf(name) !== index);
     if (duplicates.length > 0) {
       const uniqueDuplicates = [...new Set(duplicates)];
@@ -64,31 +65,41 @@ export class Agent {
     }
 
     // Validate plugin dependencies
-    for (const plugin of this.definition.plugins) {
+    for (const plugin of Object.values(this.definition.plugins)) {
       for (const [depName, depDef] of Object.entries(plugin.dependencies || {})) {
         // - Ensure the plugin is provided
-        const depPlugin = this.definition.plugins.find((p) => p.name === depName);
+        const depPlugin = Object.values(this.definition.plugins).find((p) => p.name === depName);
         if (!depPlugin) {
           throw new Error(
             `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this.definition.name}')`,
           );
         }
 
-        // - Validate that required methods exist and have the correct schema
-        for (const [methodName, expectedSchema] of Object.entries(depDef.methods || {})) {
-          // Check that the method exists
-          if (!depPlugin.methods?.[methodName]) {
+        // - Validate that required API attributes exist and have the correct schema
+        if (depDef.api?.schema) {
+          // Check that the dependency plugin has an API defined
+          if (!depPlugin.api?.schema) {
             throw new Error(
-              `Plugin "${plugin.name}" depends on method "${methodName}" from plugin "${depName}", but this method does not exist. (agent: '${this.definition.name}')`,
+              `Plugin "${plugin.name}" depends on API from plugin "${depName}", but this plugin has no API defined. (agent: '${this.definition.name}')`,
             );
           }
 
-          // Check that the method has the correct schema
-          const actualSchema = depPlugin.methods[methodName].schema;
-          if (!isSameType(expectedSchema, actualSchema)) {
-            throw new Error(
-              `Plugin "${plugin.name}" depends on method "${methodName}" from plugin "${depName}" with incompatible signature. (agent: '${this.definition.name}')`,
-            );
+          // Validate each expected API method/property
+          for (const [apiKey, expectedSchema] of Object.entries(depDef.api.schema.shape || {})) {
+            // Check that the API key exists
+            const actualSchema = depPlugin.api.schema.shape?.[apiKey];
+            if (!actualSchema) {
+              throw new Error(
+                `Plugin "${plugin.name}" depends on API method/property "${apiKey}" from plugin "${depName}", but this API key does not exist. (agent: '${this.definition.name}')`,
+              );
+            }
+
+            // Check that the API key has the correct schema
+            if (!isSameType(expectedSchema as z.ZodType, actualSchema as z.ZodType)) {
+              throw new Error(
+                `Plugin "${plugin.name}" depends on API method/property "${apiKey}" from plugin "${depName}" with incompatible signature. (agent: '${this.definition.name}')`,
+              );
+            }
           }
         }
 
@@ -123,17 +134,17 @@ export class Agent {
   }
 
   async start() {
-    // - Create plugin runners
-    for (const plugin of this.definition.plugins) {
+    // - Create plugin servers
+    for (const plugin of Object.values(this.definition.plugins)) {
       const config = plugin.config.parse(this.definition.pluginConfigs[plugin.name] ?? {});
-      this.plugins[plugin.name] = new PluginRunner(this, plugin, config);
+      this.plugins[plugin.name] = new PluginServer(this, plugin, config);
     }
 
     // - Prepare all plugins (this sets up services, interceptors, etc.)
     // biome-ignore lint/style/noNonNullAssertion: defined above, so exists
-    for (const plugin of this.definition.plugins) this.plugins[plugin.name]!.init();
+    for (const plugin of Object.values(this.definition.plugins)) this.plugins[plugin.name]!.init();
 
-    // Start all plugin runners
+    // Start all plugin servers
     await Promise.all(Object.values(this.plugins).map((p) => p.start()));
   }
 

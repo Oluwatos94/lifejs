@@ -15,27 +15,31 @@ export const rimeTTSConfigSchema = z.object({
 
 // Model
 export class RimeTTS extends TTSBase<typeof rimeTTSConfigSchema> {
-  #abortControllers: Map<string, AbortController> = new Map();
+  private abortControllers = new Map<string, AbortController>();
+  private isInitialized = false;
 
   constructor(config: z.input<typeof rimeTTSConfigSchema>) {
     super(rimeTTSConfigSchema, config);
-    if (!config.apiKey) {
+    if (!this.config.apiKey) {
       throw new Error(
         "RIME_API_KEY environment variable or config.apiKey must be provided to use this model.",
       );
     }
+    this.isInitialized = true;
   }
 
   generate(): Promise<TTSGenerateJob> {
     const job = this.createGenerateJob();
 
-    // Store abort controller for this job
-    this.#abortControllers.set(job.id, job.raw.abortController);
+    if (this.isInitialized) {
+      // Store abort controller for this job
+      this.abortControllers.set(job.id, job.raw.abortController);
 
-    // Clean up abort controller when job is done
-    job.raw.abortController.signal.addEventListener("abort", () => {
-      this.#abortControllers.delete(job.id);
-    });
+      // Clean up abort controller when job is done
+      job.raw.abortController.signal.addEventListener("abort", () => {
+        this.abortControllers.delete(job.id);
+      });
+    }
 
     return Promise.resolve(job);
   }
@@ -78,7 +82,7 @@ export class RimeTTS extends TTSBase<typeof rimeTTSConfigSchema> {
       }
 
       // Handle streaming response
-      await this.#processStreamingResponse(job, response.body);
+      await this.processStreamingResponse(job, response.body);
 
       // Signal end if this is the last text chunk
       if (isLast) {
@@ -93,7 +97,7 @@ export class RimeTTS extends TTSBase<typeof rimeTTSConfigSchema> {
     }
   }
 
-  async #processStreamingResponse(
+  private async processStreamingResponse(
     job: TTSGenerateJob,
     body: ReadableStream<Uint8Array>,
   ): Promise<void> {

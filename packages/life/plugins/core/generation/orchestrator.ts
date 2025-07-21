@@ -1,16 +1,17 @@
 import { z } from "zod";
-import type { Agent } from "@/agent/agent";
 import type { Resources } from "@/agent/resources";
+import type { AgentServer } from "@/agent/server";
 import type { EmitFunction, PluginEvent, ReadonlyPluginContext } from "@/plugins/definition";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/prefixed-id";
-import type { corePlugin } from "../core";
+import type { corePlugin } from "../server";
 import { Generation, type GenerationChunk } from "./generation";
 
 export type CoreEvent = PluginEvent<typeof corePlugin._definition.events, "output">;
-type CoreContext = z.output<typeof corePlugin._definition.context>;
+type CoreContext = z.output<typeof corePlugin._definition.context.schema>;
+
 export type CoreParams = {
-  agent: Agent;
+  agent: AgentServer;
   emit: EmitFunction<typeof corePlugin._definition.events>;
   queue: AsyncQueue<CoreEvent>;
   context: ReadonlyPluginContext<CoreContext>;

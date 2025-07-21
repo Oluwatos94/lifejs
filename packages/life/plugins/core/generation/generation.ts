@@ -1,5 +1,5 @@
-import type { Agent } from "@/agent/agent";
 import type { Resources, ToolRequests } from "@/agent/resources";
+import type { AgentServer } from "@/agent/server";
 import type { LLMGenerateMessageJob } from "@/models/llm/base";
 import type { TTSGenerateJob } from "@/models/tts/base";
 import { AsyncQueue } from "@/shared/async-queue";
@@ -25,7 +25,7 @@ export class Generation {
   status: GenerationStatus = "idle";
   params: GenerationParams = { prefix: "", needContinue: false, preventInterruption: false };
 
-  #agent: Agent;
+  #agent: AgentServer;
   #voiceEnabled: boolean;
   #llmJob: LLMGenerateMessageJob | null = null;
   #ttsJob: TTSGenerateJob | null = null;
@@ -33,7 +33,7 @@ export class Generation {
 
   #statusChangeCallbacks: ((status: GenerationStatus) => void)[] = [];
 
-  constructor(params: { agent: Agent; voiceEnabled: boolean }) {
+  constructor(params: { agent: AgentServer; voiceEnabled: boolean }) {
     this.#agent = params.agent;
     this.#voiceEnabled = params.voiceEnabled;
   }
