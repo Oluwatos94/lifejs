@@ -14,9 +14,10 @@ const agent = new Agent({
     model: "arcana", // Default model
     speaker: "default", // Voice/speaker selection
     temperature: 0.5, // Controls randomness (0.0 to 2.0)
-    topP: 0.5, // Controls diversity (0.0 to 1.0)
+    topP: 1.0, // Controls diversity (0.0 to 1.0)
     repetitionPenalty: 1.5, // Controls repetition (0.0 to 2.0)
-    maxTokens: 1200, // Maximum tokens per request
+    maxTokens: 1200, // Maximum tokens per request (200 to 5000)
+    samplingRate: 24000, // Audio sampling rate in Hz
   },
   // ... other config
 });
@@ -32,26 +33,35 @@ export RIME_API_KEY="your-api-key"
 
 ## Available Models
 
-| Model | Description |
-|-------|-------------|
-| `arcana` | Rime's most expressive and lifelike TTS model (default) |
-| `mistv2` | Multi-language support with enhanced features |
-| `mist` | Legacy model, still supported |
+| Model | Description | Streaming Endpoint |
+|-------|-------------|-------------------|
+| `arcana` | Rime's most expressive and lifelike TTS model (default) | Uses streaming PCM endpoint |
+| `mistv2` | Multi-language support with enhanced features | Standard endpoint |
+| `mist` | Legacy model, still supported | Standard endpoint |
 
 ## Configuration Schema
 
 ```typescript
 {
   apiKey: string;           // Rime API key (required)
-  model: string;            // Model name (see table above)
-  speaker: string;          // Voice/speaker selection
-  temperature: number;      // 0.0 to 2.0, controls randomness
-  topP: number;            // 0.0 to 1.0, controls diversity
-  repetitionPenalty: number; // 0.0 to 2.0, controls repetition
-  maxTokens: number;       // 1 to 1200, maximum tokens per request
+  model: "arcana" | "mist" | "mistv2"; // Model name (default: "arcana")
+  speaker: string;          // Voice/speaker selection (default: "default")
+  temperature: number;      // 0.0 to 2.0, controls randomness (default: 0.5)
+  topP: number;            // 0.0 to 1.0, controls diversity (default: 1.0)
+  repetitionPenalty: number; // 0.0 to 2.0, controls repetition (default: 1.5)
+  maxTokens: number;       // 200 to 5000, maximum tokens per request (default: 1200)
+  samplingRate: 8000 | 16000 | 22050 | 24000 | 44100 | 48000 | 96000; // Audio sampling rate (default: 24000)
   baseUrl: string;         // API base URL (default: https://users.rime.ai/v1)
 }
 ```
+
+## Audio Format
+
+The Rime provider returns audio in PCM format:
+- **Format**: 16-bit signed PCM
+- **Channels**: Mono
+- **Sample Rate**: Configurable (8kHz to 96kHz)
+- **Data Type**: Int16Array for efficient processing
 
 ## Features
 
@@ -61,6 +71,9 @@ export RIME_API_KEY="your-api-key"
 - ✅ Low latency streaming
 - ✅ Emotional depth and naturalness
 - ✅ Fine-grained control over prosody
+- ✅ Configurable audio quality (8kHz to 96kHz)
+- ✅ Incremental text processing
+- ✅ PCM audio format for real-time applications
 
 ## Getting Started
 
@@ -81,6 +94,7 @@ const agent = new Agent({
     speaker: "default",
     temperature: 0.7,
     topP: 0.8,
+    samplingRate: 24000, // High quality audio
   },
 });
 
@@ -97,11 +111,20 @@ Rime offers a diverse set of voices across different demographics, ages, and sty
 
 ## Model Selection Guide
 
-- **arcana**: Best for most use cases, highly expressive and natural
+- **arcana**: Best for most use cases, highly expressive and natural. Uses optimized streaming PCM endpoint for faster response times.
 - **mistv2**: Great for multi-language applications
 - **mist**: Legacy model for compatibility
 
 ## Advanced Configuration
+
+### Audio Quality Settings
+Choose sampling rate based on your needs:
+- `8000`: Phone quality, smallest bandwidth
+- `16000`: Standard voice quality
+- `24000`: High quality (default), good balance
+- `44100`: CD quality
+- `48000`: Professional audio
+- `96000`: Ultra-high quality, largest bandwidth
 
 ### Temperature Control
 - `0.0`: Very deterministic, consistent output
@@ -110,26 +133,48 @@ Rime offers a diverse set of voices across different demographics, ages, and sty
 
 ### Top-P Sampling
 - `0.1`: More focused, conservative
-- `0.5`: Balanced (default)
-- `1.0`: More diverse output
+- `1.0`: Full diversity (default)
+- Values between 0.1-1.0: Balanced control
 
 ### Repetition Penalty
 - `1.0`: No penalty
 - `1.5`: Moderate penalty (default)
 - `2.0`: Strong penalty against repetition
 
+### Token Limits
+- `200`: Minimum tokens per request
+- `1200`: Default, good for most use cases
+- `5000`: Maximum tokens, for longer text synthesis
+
+## Technical Implementation
+
+### Streaming Behavior
+- **Arcana model**: Uses dedicated streaming PCM endpoint for optimal performance
+- **Other models**: Use standard TTS endpoint
+- **Audio processing**: Real-time PCM conversion to Int16Array
+- **Incremental processing**: Handles text chunks efficiently with context preservation
+
+### Job Management
+- Automatic abort controller management
+- Incremental text tracking per job
+- Stream coordination to prevent overlapping requests
+- Clean resource cleanup on job completion
+
 ## Error Handling
 
 The provider handles common errors gracefully:
 
-- **Invalid API key**: Throws configuration error
+- **Invalid API key**: Throws configuration error with clear message
 - **Network issues**: Retries with exponential backoff
 - **Rate limiting**: Respects API rate limits
-- **Streaming errors**: Properly closes connections
+- **Streaming errors**: Properly closes connections and cleans up resources
+- **Abort handling**: Clean cancellation of ongoing requests
 
 ## Performance Notes
 
 - Streaming starts in 200-300ms regardless of text length
-- Optimized for real-time applications
+- Optimized for real-time applications with PCM audio format
 - Supports cancellation of ongoing requests
 - Efficient memory usage with streaming audio chunks
+- Context-aware incremental text processing reduces redundant API calls
+- Automatic sampling rate optimization based on model capabilities
